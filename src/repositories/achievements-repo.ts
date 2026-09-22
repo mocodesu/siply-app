@@ -1,14 +1,11 @@
-// ─────────────────────────────────────────────────────────────
 // repositories/achievements-repo.ts
 //
 // Achievement persistence + live progress computation.
 //
-// The DB only stores `progress`, `target`, `unlocked_at`, and
-// `updated_at`. Progress is a cache — the authoritative value is
-// recomputed from `water_logs` on every read. `unlocked_at` is the
-// one field with real persistence semantics: it's written once and
-// never cleared, so achievements survive data deletion.
-// ─────────────────────────────────────────────────────────────
+// computeAchievements now also returns the subset of achievements
+// that flipped from locked to unlocked during this run, so callers
+// can celebrate the moment it happens instead of discovering it on
+// the next screen visit.
 import {
   ACHIEVEMENT_DEFINITIONS,
   HERO_GOAL_THRESHOLD_ML,
@@ -17,23 +14,26 @@ import {
 import { longestStreak } from "@/utils/streak";
 import type { SQLiteDatabase } from "expo-sqlite";
 
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 // Public types
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 
 export interface AchievementView {
   id: string;
   title: string;
   description: string;
   icon: AchievementIconName;
-  /** Value at which the badge unlocks. */
   target: number;
-  /** Best-ever progress, capped at `target`. Monotonic. */
   progress: number;
-  /** True once `progress` has ever reached `target`. Sticky. */
   unlocked: boolean;
-  /** Renders in the hero slot rather than the badge list. */
   isHero: boolean;
+}
+
+export interface AchievementComputation {
+  /** Every achievement, in definition order, with current state. */
+  views: AchievementView[];
+  /** Achievements that just flipped from locked to unlocked. */
+  newlyUnlocked: AchievementView[];
 }
 
 interface AchievementRow {
@@ -49,16 +49,10 @@ interface MetricValues {
   "longest-streak": number;
 }
 
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 // Seeding
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 
-/**
- * Inserts a row for any achievement definition that doesn't already
- * have one. Uses `INSERT OR IGNORE` so existing rows (and their
- * `unlocked_at` timestamps) are never touched. Safe to call on
- * every read — it's a no-op once the table is populated.
- */
 async function seedMissingRows(db: SQLiteDatabase): Promise<void> {
   const now = Date.now();
   for (const def of ACHIEVEMENT_DEFINITIONS) {
@@ -73,15 +67,10 @@ async function seedMissingRows(db: SQLiteDatabase): Promise<void> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 // Metric computation
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 
-/**
- * Reads every raw number the achievements layer needs in a single
- * pass. Three queries in parallel rather than one per achievement,
- * so adding a new badge costs nothing at read time.
- */
 async function readMetricValues(db: SQLiteDatabase): Promise<MetricValues> {
   const [logCountRow, distinctDayRows, goalHitRows] = await Promise.all([
     db.getFirstAsync<{ count: number }>(
@@ -106,26 +95,23 @@ async function readMetricValues(db: SQLiteDatabase): Promise<MetricValues> {
   };
 }
 
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 // Public API
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 
 export const AchievementsRepo = {
   /**
    * Computes live achievement progress, persists it monotonically,
-   * and returns the combined view for rendering.
+   * and returns the combined view for rendering plus any
+   * achievements that unlocked during this call.
    *
-   * Two invariants the caller can rely on:
-   *
-   *   1. `progress` never decreases across calls. It's the best-ever
-   *      value, so deleting old logs can't walk a badge backwards.
-   *
-   *   2. `unlocked` never flips back to false. Once `unlocked_at` is
-   *      set, it stays set regardless of later data changes.
-   *
-   * The returned array preserves `ACHIEVEMENT_DEFINITIONS` order.
+   * Two invariants:
+   *   1. `progress` never decreases across calls.
+   *   2. `unlocked` never flips back to false.
    */
-  async computeAchievements(db: SQLiteDatabase): Promise<AchievementView[]> {
+  async computeAchievements(
+    db: SQLiteDatabase,
+  ): Promise<AchievementComputation> {
     await seedMissingRows(db);
 
     const [metricValues, rows] = await Promise.all([
@@ -138,6 +124,7 @@ export const AchievementsRepo = {
     const existing = new Map(rows.map((row) => [row.id, row]));
     const now = Date.now();
     const views: AchievementView[] = [];
+    const newlyUnlocked: AchievementView[] = [];
 
     for (const def of ACHIEVEMENT_DEFINITIONS) {
       const raw = metricValues[def.metric];
@@ -148,6 +135,7 @@ export const AchievementsRepo = {
 
       const previouslyUnlocked = (previous?.unlocked_at ?? null) !== null;
       const reachedTargetThisRun = bestProgress >= def.target;
+      const isFreshUnlock = !previouslyUnlocked && reachedTargetThisRun;
 
       const unlocked = previouslyUnlocked || reachedTargetThisRun;
       const unlockedAt = previouslyUnlocked
@@ -167,7 +155,7 @@ export const AchievementsRepo = {
         def.id,
       );
 
-      views.push({
+      const view: AchievementView = {
         id: def.id,
         title: def.title,
         description: def.description,
@@ -176,9 +164,12 @@ export const AchievementsRepo = {
         progress: bestProgress,
         unlocked,
         isHero: def.isHero ?? false,
-      });
+      };
+
+      views.push(view);
+      if (isFreshUnlock) newlyUnlocked.push(view);
     }
 
-    return views;
+    return { views, newlyUnlocked };
   },
 };

@@ -1,12 +1,14 @@
 // ─────────────────────────────────────────────────────────────
 // app/(tabs)/index.tsx — Home dashboard
 //
-// Changes in Step A:
-//   • Drawer icon removed — the app has no drawer.
-//   • Bell navigates to Reminders.
-//   • Notification dot shown only when a reminder is imminent.
-//   • ReminderCard is wired to real reminders, hidden when none.
+// Step D:
+//   • Sections stagger in on mount with 60 ms increments
+//   • Total ml and percentage count up via AnimatedNumber
+//   • The ml counter shares the ring's easing so the two animate
+//     in visual lockstep
 // ─────────────────────────────────────────────────────────────
+import { AnimatedNumber } from "@/components/animated-number";
+import { FadeInView } from "@/components/fade-in";
 import { HydrationRing } from "@/components/hydration-ring";
 import { IconButton } from "@/components/icon-button";
 import { QuickAddCard } from "@/components/quick-add-card";
@@ -16,15 +18,14 @@ import Text from "@/components/text";
 import { useNextReminder } from "@/hooks/use-next-reminder";
 import { useHydrationStore } from "@/store/hydration-store";
 import { useSettingsStore } from "@/store/settings-store";
-import { formatVolume, formatVolumeValue } from "@/utils/format";
+import { formatNumber, formatVolume } from "@/utils/format";
 import { unitSuffix } from "@/utils/units";
 import { router } from "expo-router";
 import React, { useCallback } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
-/** A reminder within this window shows the notification dot. */
-const IMMINENT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const IMMINENT_WINDOW_MS = 60 * 60 * 1000;
 
 function greetingForHour(hour: number): string {
   if (hour < 12) return "Good Morning!";
@@ -56,71 +57,85 @@ export default function HomeScreen() {
 
   return (
     <ScrollScreen testID="home-screen">
-      <View style={styles.headerBlock}>
-        <View style={styles.topBar}>
-          {/* Left spacer keeps the bell right-aligned without a
-              visible drawer affordance. */}
-          <View style={styles.topBarSpacer} />
+      <FadeInView delay={0}>
+        <View style={styles.headerBlock}>
+          <View style={styles.topBar}>
+            <View style={styles.topBarSpacer} />
+            <IconButton
+              name="notifications-outline"
+              onPress={handleOpenReminders}
+              accessibilityLabel="View reminders"
+              showDot={showNotificationDot}
+              testID="home-notifications-button"
+            />
+          </View>
 
-          <IconButton
-            name="notifications-outline"
-            onPress={handleOpenReminders}
-            accessibilityLabel="View reminders"
-            showDot={showNotificationDot}
-            testID="home-notifications-button"
-          />
-        </View>
-
-        <View style={styles.greetingBlock}>
-          <Text variant="h2" color="onBackground">
-            {greeting} 💧
-          </Text>
-          <Text variant="subhead" color="mutedText">
-            Stay hydrated, stay healthy.
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.ringWrapper}>
-        <HydrationRing
-          current={totalMl}
-          goal={goalMl}
-          size={240}
-          testID="home-hydration-ring"
-        >
-          <View style={styles.ringCenter}>
-            <Text variant="caption" color="mutedText">
-              Today
+          <View style={styles.greetingBlock}>
+            <Text variant="h2" color="onBackground">
+              {greeting} 💧
             </Text>
-            <Text variant="display" color="onBackground">
-              {formatVolumeValue(totalMl, units)} {unitSuffix(units)}
-            </Text>
-            <Text variant="caption" color="mutedText">
-              of {formatVolume(goalMl, units)} goal
-            </Text>
-            <Text variant="h3" color="primary" style={styles.ringPercent}>
-              {Math.round(percentage * 100)}%
+            <Text variant="subhead" color="mutedText">
+              Stay hydrated, stay healthy.
             </Text>
           </View>
-        </HydrationRing>
-      </View>
+        </View>
+      </FadeInView>
+
+      <FadeInView delay={60}>
+        <View style={styles.ringWrapper}>
+          <HydrationRing
+            current={totalMl}
+            goal={goalMl}
+            size={240}
+            testID="home-hydration-ring"
+          >
+            <View style={styles.ringCenter}>
+              <Text variant="caption" color="mutedText">
+                Today
+              </Text>
+              <AnimatedNumber
+                value={totalMl}
+                startFrom={0}
+                variant="display"
+                color="onBackground"
+                format={(n) => `${formatNumber(n)} ${unitSuffix(units)}`}
+              />
+              <Text variant="caption" color="mutedText">
+                of {formatVolume(goalMl, units)} goal
+              </Text>
+              <AnimatedNumber
+                value={Math.round(percentage * 100)}
+                startFrom={0}
+                variant="h3"
+                color="primary"
+                style={styles.ringPercent}
+                format={(n) => `${n}%`}
+              />
+            </View>
+          </HydrationRing>
+        </View>
+      </FadeInView>
 
       {nextReminder && (
-        <ReminderCard
-          label="Next reminder"
-          timeLeft={nextReminder.timeLeft}
-          time={nextReminder.time}
-          onPress={handleOpenReminders}
-          testID="home-reminder-card"
-        />
+        <FadeInView delay={120}>
+          <ReminderCard
+            label="Next reminder"
+            timeLeft={nextReminder.timeLeft}
+            time={nextReminder.time}
+            onPress={handleOpenReminders}
+            testID="home-reminder-card"
+          />
+        </FadeInView>
       )}
 
-      <QuickAddCard
-        onPress={handleOpenAddWater}
-        title="Add water"
-        description="Logging water is as easy as 1 tap!"
-        testID="home-quick-add"
-      />
+      <FadeInView delay={nextReminder ? 180 : 120}>
+        <QuickAddCard
+          onPress={handleOpenAddWater}
+          title="Add water"
+          description="Logging water is as easy as 1 tap!"
+          testID="home-quick-add"
+        />
+      </FadeInView>
     </ScrollScreen>
   );
 }

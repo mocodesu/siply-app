@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────
 import { AchievementHero } from "@/components/achievement-hero";
 import { BadgeRow } from "@/components/badge-row";
+import { FadeInView } from "@/components/fade-in";
 import { IconButton } from "@/components/icon-button";
 import { ScrollScreen } from "@/components/screen";
 import Text from "@/components/text";
@@ -63,50 +64,51 @@ export default function AchievementsScreen() {
   return (
     <ScrollScreen header={header} testID="achievements-screen">
       {!loading && hero && (
-        <AchievementHero
-          title={hero.title}
-          description={hero.description}
-          targetLabel={HERO_UNIT_LABEL}
-          progress={hero.progress}
-          target={hero.target}
-          testID="achievements-hero"
-        />
+        <FadeInView>
+          <AchievementHero
+            title={hero.title}
+            description={hero.description}
+            targetLabel={HERO_UNIT_LABEL}
+            progress={hero.progress}
+            target={hero.target}
+            testID="achievements-hero"
+          />
+        </FadeInView>
       )}
 
       {!loading && badges.length > 0 && (
-        <View style={styles.listSection}>
-          <Text variant="subheadBold" color="onSurface">
-            All Badges
-          </Text>
+        <FadeInView delay={120}>
+          <View style={styles.listSection}>
+            <Text variant="subheadBold" color="onSurface">
+              All Badges
+            </Text>
 
-          <View style={styles.list}>
-            {badges.map((badge) => {
-              // Streak badges above the highest unlocked tier are
-              // shown as locked. Non-streak badges always show
-              // their counter when there's progress.
-              const isStreakBadge = badge.description
-                .toLowerCase()
-                .includes("daily");
-              const showProgress = isStreakBadge
-                ? badge.target <= highestStreak || badge.unlocked
-                : true;
+            <View style={styles.list}>
+              {badges.map((badge) => {
+                const isStreakBadge = badge.description
+                  .toLowerCase()
+                  .includes("daily");
+                const showProgress = isStreakBadge
+                  ? badge.target <= highestStreak || badge.unlocked
+                  : true;
 
-              return (
-                <BadgeRow
-                  key={badge.id}
-                  title={badge.title}
-                  description={badge.description}
-                  icon={badge.icon}
-                  progress={badge.progress}
-                  target={badge.target}
-                  unlocked={badge.unlocked}
-                  showProgress={showProgress}
-                  testID={`achievements-badge-${badge.id}`}
-                />
-              );
-            })}
+                return (
+                  <BadgeRow
+                    key={badge.id}
+                    title={badge.title}
+                    description={badge.description}
+                    icon={badge.icon}
+                    progress={badge.progress}
+                    target={badge.target}
+                    unlocked={badge.unlocked}
+                    showProgress={showProgress}
+                    testID={`achievements-badge-${badge.id}`}
+                  />
+                );
+              })}
+            </View>
           </View>
-        </View>
+        </FadeInView>
       )}
     </ScrollScreen>
   );

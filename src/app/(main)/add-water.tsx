@@ -1,10 +1,15 @@
 // ─────────────────────────────────────────────────────────────
 // app/(main)/add-water.tsx
 //
+// Step C: the bookmark button is gone. It toggled local state but
+// had no persistence behind it — an honest header is Close plus
+// empty spacer, no affordance that lies.
+//
 // Unit-aware: cup cards, glass amount, and CTA respect the user's
 // chosen units. Storage stays in ml.
 // ─────────────────────────────────────────────────────────────
 import { CupCard } from "@/components/cup-card";
+import { FadeInView } from "@/components/fade-in";
 import { IconButton } from "@/components/icon-button";
 import { PrimaryButton } from "@/components/primary-button";
 import { ScrollScreen } from "@/components/screen";
@@ -19,17 +24,22 @@ import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
 const CUP_SIZES_ML = [100, 250, 500] as const;
-const DEFAULT_CUP_ML = 250;
 const MAX_CUP_ML = 500;
 const GLASS_CAPACITY_ML = 500;
 
 export default function AddWaterScreen() {
   const totalMl = useHydrationStore((s) => s.totalMl);
   const addWater = useHydrationStore((s) => s.addWater);
+  const defaultCupSize = useSettingsStore((s) => s.defaultCupSize);
   const units = useSettingsStore((s) => s.units);
 
-  const [selectedMl, setSelectedMl] = useState<number>(DEFAULT_CUP_ML);
-  const [isSaved, setIsSaved] = useState(false);
+  const initialCup = CUP_SIZES_ML.includes(
+    defaultCupSize as (typeof CUP_SIZES_ML)[number],
+  )
+    ? defaultCupSize
+    : 250;
+
+  const [selectedMl, setSelectedMl] = useState<number>(initialCup);
 
   const handleClose = useCallback(() => {
     if (router.canGoBack()) router.back();
@@ -40,10 +50,6 @@ export default function AddWaterScreen() {
     if (router.canGoBack()) router.back();
   }, [addWater, selectedMl]);
 
-  const handleToggleSaved = useCallback(() => {
-    setIsSaved((prev) => !prev);
-  }, []);
-
   const header = (
     <View style={styles.headerRow}>
       <IconButton
@@ -52,64 +58,69 @@ export default function AddWaterScreen() {
         accessibilityLabel="Close"
         testID="add-water-close"
       />
-      <IconButton
-        name={isSaved ? "bookmark" : "bookmark-outline"}
-        onPress={handleToggleSaved}
-        accessibilityLabel={isSaved ? "Remove from saved" : "Save this amount"}
-        testID="add-water-save"
-      />
+      <View style={styles.headerSpacer} />
     </View>
   );
 
   return (
     <ScrollScreen header={header} testID="add-water-screen">
-      <View style={styles.titleBlock}>
-        <Text variant="h2" color="onBackground" textAlign="center">
-          Add Water
-        </Text>
-        <Text variant="subhead" color="mutedText" textAlign="center">
-          Today: {formatVolume(totalMl, units)}
-        </Text>
-      </View>
+      <FadeInView>
+        <View style={styles.titleBlock}>
+          <Text variant="h2" color="onBackground" textAlign="center">
+            Add Water
+          </Text>
+          <Text variant="subhead" color="mutedText" textAlign="center">
+            Today: {formatVolume(totalMl, units)}
+          </Text>
+        </View>
+      </FadeInView>
 
-      <View style={styles.cupRow}>
-        {CUP_SIZES_ML.map((ml) => (
-          <CupCard
-            key={ml}
-            amountMl={ml}
-            maxAmountMl={MAX_CUP_ML}
-            selected={ml === selectedMl}
-            onPress={() => setSelectedMl(ml)}
-            testID={`add-water-cup-${ml}`}
+      <FadeInView delay={60}>
+        <View style={styles.cupRow}>
+          {CUP_SIZES_ML.map((ml) => (
+            <CupCard
+              key={ml}
+              amountMl={ml}
+              maxAmountMl={MAX_CUP_ML}
+              selected={ml === selectedMl}
+              onPress={() => setSelectedMl(ml)}
+              testID={`add-water-cup-${ml}`}
+            />
+          ))}
+        </View>
+      </FadeInView>
+
+      <FadeInView delay={120}>
+        <View style={styles.glassWrapper}>
+          <WaterFill
+            amount={selectedMl}
+            capacity={GLASS_CAPACITY_ML}
+            width={170}
+            height={230}
+            testID="add-water-glass"
           />
-        ))}
-      </View>
+        </View>
+      </FadeInView>
 
-      <View style={styles.glassWrapper}>
-        <WaterFill
-          amount={selectedMl}
-          capacity={GLASS_CAPACITY_ML}
-          width={170}
-          height={230}
-          testID="add-water-glass"
+      <FadeInView delay={180}>
+        <View style={styles.amountBlock}>
+          <Text variant="h1" color="primary" textAlign="center">
+            + {formatVolume(selectedMl, units)}
+          </Text>
+          <Text variant="subhead" color="mutedText" textAlign="center">
+            Great choice!
+          </Text>
+        </View>
+      </FadeInView>
+
+      <FadeInView delay={240}>
+        <PrimaryButton
+          label="Add Water"
+          icon="water"
+          onPress={handleAdd}
+          testID="add-water-submit"
         />
-      </View>
-
-      <View style={styles.amountBlock}>
-        <Text variant="h1" color="primary" textAlign="center">
-          + {formatVolume(selectedMl, units)}
-        </Text>
-        <Text variant="subhead" color="mutedText" textAlign="center">
-          Great choice!
-        </Text>
-      </View>
-
-      <PrimaryButton
-        label="Add Water"
-        icon="water"
-        onPress={handleAdd}
-        testID="add-water-submit"
-      />
+      </FadeInView>
     </ScrollScreen>
   );
 }
@@ -120,6 +131,10 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "space-between",
     minHeight: theme.layout.minTouchTarget,
+  },
+  headerSpacer: {
+    width: theme.layout.minTouchTarget,
+    height: theme.layout.minTouchTarget,
   },
   titleBlock: {
     gap: theme.spacing.xxs,

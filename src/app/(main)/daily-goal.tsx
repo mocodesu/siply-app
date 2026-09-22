@@ -1,8 +1,12 @@
 // ─────────────────────────────────────────────────────────────
 // app/(main)/daily-goal.tsx
 //
-// Now unit-aware: slider, presets, and displayed amount all
-// respect the user's chosen units. Storage stays in ml.
+// Step C:
+//   • Edit pencil now resets the slider to the currently saved
+//     goal — a real, reversible action instead of a no-op.
+//   • "Learn more" navigates to the hydration guide.
+//   • Removed the "Edit" text next to Custom Cup Sizes, which had
+//     nothing to open — cup sizes are fixed constants.
 // ─────────────────────────────────────────────────────────────
 import { CupSizeGrid } from "@/components/cup-size-grid";
 import { GoalSlider } from "@/components/goal-slider";
@@ -15,6 +19,7 @@ import Text from "@/components/text";
 import { useHydrationStore } from "@/store/hydration-store";
 import { useSettingsStore } from "@/store/settings-store";
 import { formatVolume, formatVolumeValue } from "@/utils/format";
+import { feedback } from "@/utils/haptics";
 import {
   fromMl,
   maxGoalForUnit,
@@ -51,10 +56,22 @@ export default function DailyGoalScreen() {
   const maxValue = maxGoalForUnit(units);
   const step = stepForUnit(units);
 
-  // Slider value is kept in the display unit.
-  const [displayValue, setDisplayValue] = useState<number>(() =>
-    Math.round(fromMl(currentGoalMl, units)),
+  const savedDisplayValue = useMemo(
+    () => Math.round(fromMl(currentGoalMl, units)),
+    [currentGoalMl, units],
   );
+
+  const [displayValue, setDisplayValue] = useState<number>(savedDisplayValue);
+
+  // Re-sync when the goal changes externally (e.g. from another
+  // screen), so a stale slider can't persist after the fact.
+  const [syncedFrom, setSyncedFrom] = useState(savedDisplayValue);
+  if (syncedFrom !== savedDisplayValue) {
+    setSyncedFrom(savedDisplayValue);
+    setDisplayValue(savedDisplayValue);
+  }
+
+  const hasChanges = displayValue !== savedDisplayValue;
 
   const selectedPresetKey = useMemo(() => {
     const draftMl = toMl(displayValue, units);
@@ -64,9 +81,16 @@ export default function DailyGoalScreen() {
     return match?.key ?? null;
   }, [displayValue, units, step]);
 
+  // ── Handlers ────────────────────────────────────────────
   const handleBack = useCallback(() => {
     if (router.canGoBack()) router.back();
   }, []);
+
+  const handleReset = useCallback(() => {
+    if (!hasChanges) return;
+    setDisplayValue(savedDisplayValue);
+    feedback("selection");
+  }, [hasChanges, savedDisplayValue]);
 
   const handlePresetPress = useCallback(
     (ml: number) => {
@@ -75,14 +99,14 @@ export default function DailyGoalScreen() {
     [units],
   );
 
+  const handleLearnMore = useCallback(() => {
+    router.push("/hydration-guide");
+  }, []);
+
   const handleSave = useCallback(() => {
     void setGoal(toMl(displayValue, units));
     if (router.canGoBack()) router.back();
   }, [setGoal, displayValue, units]);
-
-  const handleNoop = useCallback(() => {
-    // Edit mode toggling is a future refinement.
-  }, []);
 
   const header = (
     <View style={styles.headerRow}>
@@ -93,10 +117,10 @@ export default function DailyGoalScreen() {
         testID="daily-goal-back"
       />
       <IconButton
-        name="pencil"
-        onPress={handleNoop}
-        accessibilityLabel="Edit goal"
-        testID="daily-goal-edit"
+        name="refresh"
+        onPress={handleReset}
+        accessibilityLabel="Reset to saved goal"
+        testID="daily-goal-reset"
       />
     </View>
   );
@@ -146,25 +170,21 @@ export default function DailyGoalScreen() {
         title="About your goal"
         body="The amount of water you should drink daily can vary based on your weight, activity level and climate."
         actionLabel="Learn more"
-        onActionPress={handleNoop}
+        onActionPress={handleLearnMore}
         testID="daily-goal-about"
       />
 
       <View style={styles.cupSection}>
-        <View style={styles.cupHeader}>
-          <Text variant="subheadBold" color="onSurface">
-            Custom Cup Sizes
-          </Text>
-          <Text variant="subheadBold" color="primary">
-            Edit
-          </Text>
-        </View>
+        <Text variant="subheadBold" color="onSurface">
+          Custom Cup Sizes
+        </Text>
         <CupSizeGrid sizes={CUP_SIZES_ML} testID="daily-goal-cup-grid" />
       </View>
 
       <PrimaryButton
         label="Save Goal"
         onPress={handleSave}
+        disabled={!hasChanges}
         testID="daily-goal-save"
       />
     </ScrollScreen>
@@ -192,10 +212,5 @@ const styles = StyleSheet.create((theme) => ({
   },
   cupSection: {
     gap: theme.spacing.sm,
-  },
-  cupHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
   },
 }));

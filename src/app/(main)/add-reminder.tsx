@@ -1,18 +1,19 @@
 // ─────────────────────────────────────────────────────────────
 // app/(main)/add-reminder.tsx
 //
-// Modal for adding a new reminder. Composes TimePicker with a
-// preview of the chosen time and a Save button.
+// Now schedules the OS notification on save instead of only
+// writing to SQLite. Surfaces permission failures inline rather
+// than silently creating a row that never fires.
 // ─────────────────────────────────────────────────────────────
 import { IconButton } from "@/components/icon-button";
 import { PrimaryButton } from "@/components/primary-button";
 import { ScrollScreen } from "@/components/screen";
 import Text from "@/components/text";
 import { TimePicker, type Meridiem } from "@/components/time-picker";
-import { ReminderRepo, type Reminder } from "@/repositories/reminder-repo";
+import { useReminderActions } from "@/hooks/use-reminder-actions";
 import { useRemindersStore } from "@/store/reminders-store";
+import { feedback } from "@/utils/haptics";
 import { router } from "expo-router";
-import { useSQLiteContext } from "expo-sqlite";
 import React, { useCallback, useMemo, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -30,7 +31,6 @@ function formatTimeLabel(hour12: number, minute: number, meridiem: Meridiem) {
   return `${hour12}:${String(minute).padStart(2, "0")} ${meridiem}`;
 }
 
-/** Deterministic ID so re-adding the same time is idempotent. */
 function reminderId(hour24: number, minute: number): string {
   return `rem-${String(hour24).padStart(2, "0")}${String(minute).padStart(2, "0")}`;
 }
@@ -40,13 +40,13 @@ function reminderId(hour24: number, minute: number): string {
 // ─────────────────────────────────────────────────────────────
 
 export default function AddReminderScreen() {
-  const db = useSQLiteContext();
-  const refresh = useRemindersStore((s) => s.refresh);
   const existing = useRemindersStore((s) => s.reminders);
+  const { addReminder, busy } = useReminderActions();
 
   const [hour12, setHour12] = useState(10);
   const [minute, setMinute] = useState(0);
   const [meridiem, setMeridiem] = useState<Meridiem>("AM");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const hour24 = useMemo(() => to24Hour(hour12, meridiem), [hour12, meridiem]);
 
@@ -67,20 +67,35 @@ export default function AddReminderScreen() {
   }, []);
 
   const handleSave = useCallback(async () => {
-    if (isDuplicate) return;
+    if (isDuplicate || busy) return;
 
-    const reminder: Omit<Reminder, "notificationId" | "createdAt"> = {
+    setErrorMessage(null);
+
+    const result = await addReminder({
       id,
       label,
       hour: hour24,
       minute,
-      enabled: true,
-    };
+    });
 
-    await ReminderRepo.insert(db, reminder);
-    await refresh();
-    if (router.canGoBack()) router.back();
-  }, [db, id, label, hour24, minute, isDuplicate, refresh]);
+    if (result.ok) {
+      feedback("success", "success");
+      if (router.canGoBack()) router.back();
+      return;
+    }
+
+    feedback("error");
+
+    if (result.reason === "permission") {
+      setErrorMessage(
+        "Notifications are disabled. Enable them in Settings to have this reminder fire.",
+      );
+    } else if (result.reason === "duplicate") {
+      setErrorMessage("A reminder already exists at this time.");
+    } else {
+      setErrorMessage("Couldn't save this reminder. Please try again.");
+    }
+  }, [addReminder, id, label, hour24, minute, isDuplicate, busy]);
 
   const header = (
     <View style={styles.headerRow}>
@@ -102,6 +117,12 @@ export default function AddReminderScreen() {
     </View>
   );
 
+  const subtitle = errorMessage
+    ? errorMessage
+    : isDuplicate
+      ? "You already have a reminder at this time."
+      : "Repeats every day.";
+
   return (
     <ScrollScreen header={header} testID="add-reminder-screen">
       {/* ── Preview ─────────────────────────────────────── */}
@@ -109,10 +130,12 @@ export default function AddReminderScreen() {
         <Text variant="display" color="primary" textAlign="center">
           {label}
         </Text>
-        <Text variant="caption" color="mutedText" textAlign="center">
-          {isDuplicate
-            ? "You already have a reminder at this time."
-            : "Repeats every day."}
+        <Text
+          variant="caption"
+          color={errorMessage ? "danger" : "mutedText"}
+          textAlign="center"
+        >
+          {subtitle}
         </Text>
       </View>
 
@@ -125,17 +148,18 @@ export default function AddReminderScreen() {
           setHour12(next.hour12);
           setMinute(next.minute);
           setMeridiem(next.meridiem);
+          setErrorMessage(null);
         }}
         testIDPrefix="add-reminder"
       />
 
       {/* ── Save ────────────────────────────────────────── */}
       <PrimaryButton
-        label="Save Reminder"
+        label={busy ? "Saving…" : "Save Reminder"}
         onPress={() => {
           void handleSave();
         }}
-        disabled={isDuplicate}
+        disabled={isDuplicate || busy}
         testID="add-reminder-save"
       />
     </ScrollScreen>

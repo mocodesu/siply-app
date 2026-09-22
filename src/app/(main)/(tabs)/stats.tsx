@@ -1,31 +1,23 @@
 // ─────────────────────────────────────────────────────────────
 // app/(tabs)/stats.tsx — Statistics
 //
-// Layout mirrors reference screen 7: header, Week/Month/Year
-// segmented control, an average-intake summary with a delta, the
-// intake bar chart, a consistency bar, and the period total.
-//
-// The chart measures its own width via `onLayout` rather than
-// computing it from `useWindowDimensions`, so it stays correct on
-// tablets and in split view without any theme lookups here.
+// Step C: the back chevron is gone. This screen is a tab, and a
+// back affordance that sometimes does nothing is worse than no
+// affordance at all. The header is just the title.
 // ─────────────────────────────────────────────────────────────
 import { BarChart } from "@/components/bar-chart";
 import { ConsistencyBar } from "@/components/consistency-bar";
-import { IconButton } from "@/components/icon-button";
 import { ScrollScreen } from "@/components/screen";
 import { SegmentedControl, type Segment } from "@/components/segmented-control";
 import { StatDelta } from "@/components/stat-delta";
 import Text from "@/components/text";
 import { useStats, type StatsPeriod } from "@/hooks/use-stats";
-import { formatNumber } from "@/utils/format";
-import { router } from "expo-router";
+import { useSettingsStore } from "@/store/settings-store";
+import { formatVolumeValue } from "@/utils/format";
+import { unitSuffix } from "@/utils/units";
 import React, { useCallback, useState } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-
-// ─────────────────────────────────────────────────────────────
-// Period segments
-// ─────────────────────────────────────────────────────────────
 
 const PERIODS: readonly Segment<StatsPeriod>[] = [
   { key: "week", label: "Week" },
@@ -33,27 +25,17 @@ const PERIODS: readonly Segment<StatsPeriod>[] = [
   { key: "year", label: "Year" },
 ];
 
-// ─────────────────────────────────────────────────────────────
-// Screen
-// ─────────────────────────────────────────────────────────────
-
 export default function StatsScreen() {
   const [period, setPeriod] = useState<StatsPeriod>("week");
   const [chartWidth, setChartWidth] = useState(0);
 
+  const units = useSettingsStore((s) => s.units);
   const stats = useStats(period);
-
-  const handleBack = useCallback(() => {
-    if (router.canGoBack()) {
-      router.back();
-    }
-  }, []);
 
   const handleChartLayout = useCallback((event: LayoutChangeEvent) => {
     setChartWidth(event.nativeEvent.layout.width);
   }, []);
 
-  // Highlight the tallest bar when it has a meaningful value.
   const highlightIndex = React.useMemo(() => {
     if (stats.bars.length === 0) return -1;
     let bestIndex = -1;
@@ -67,29 +49,14 @@ export default function StatsScreen() {
     return bestValue > 0 ? bestIndex : -1;
   }, [stats.bars]);
 
-  const header = (
-    <View style={styles.headerRow}>
-      <IconButton
-        name="chevron-back"
-        onPress={handleBack}
-        accessibilityLabel="Go back"
-        testID="stats-back"
-      />
-      <Text
-        variant="title"
-        color="onBackground"
-        textAlign="center"
-        style={styles.headerTitle}
-      >
-        Statistics
-      </Text>
-      <View style={styles.headerSpacer} />
-    </View>
-  );
-
   return (
-    <ScrollScreen header={header} testID="stats-screen">
-      {/* ── Period picker ───────────────────────────────── */}
+    <ScrollScreen testID="stats-screen">
+      <View style={styles.titleBlock}>
+        <Text variant="h2" color="onBackground" textAlign="center">
+          Statistics
+        </Text>
+      </View>
+
       <SegmentedControl
         segments={PERIODS}
         value={period}
@@ -97,14 +64,13 @@ export default function StatsScreen() {
         testID="stats-period"
       />
 
-      {/* ── Summary ─────────────────────────────────────── */}
       <View style={styles.summaryRow}>
         <View style={styles.summaryText}>
           <Text variant="caption" color="mutedText">
             Average Intake
           </Text>
           <Text variant="h2" color="onSurface">
-            {formatNumber(stats.averageMl)} ml
+            {formatVolumeValue(stats.averageMl, units)} {unitSuffix(units)}
           </Text>
           <Text variant="caption" color="mutedText">
             {stats.periodLabel}
@@ -118,7 +84,6 @@ export default function StatsScreen() {
         />
       </View>
 
-      {/* ── Chart ───────────────────────────────────────── */}
       <View
         style={styles.chartWrapper}
         onLayout={handleChartLayout}
@@ -134,7 +99,6 @@ export default function StatsScreen() {
         )}
       </View>
 
-      {/* ── Consistency ─────────────────────────────────── */}
       <View style={styles.card}>
         <ConsistencyBar value={stats.consistency} testID="stats-consistency" />
 
@@ -145,7 +109,7 @@ export default function StatsScreen() {
             Total Intake
           </Text>
           <Text variant="h3" color="onSurface">
-            {formatNumber(stats.totalMl)} ml
+            {formatVolumeValue(stats.totalMl, units)} {unitSuffix(units)}
           </Text>
         </View>
       </View>
@@ -154,17 +118,8 @@ export default function StatsScreen() {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  headerRow: {
-    flexDirection: "row",
+  titleBlock: {
     alignItems: "center",
-    minHeight: theme.layout.minTouchTarget,
-  },
-  headerTitle: {
-    flex: 1,
-  },
-  headerSpacer: {
-    width: theme.layout.minTouchTarget,
-    height: theme.layout.minTouchTarget,
   },
   summaryRow: {
     flexDirection: "row",

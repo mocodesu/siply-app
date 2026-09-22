@@ -1,14 +1,7 @@
-// ─────────────────────────────────────────────────────────────
 // hooks/use-achievements.ts
 //
 // Owns the achievements read path. Refetches on focus so returning
-// to the screen after logging water shows updated progress without
-// a manual refresh.
-//
-// `loading` is true only for the very first read. Subsequent focus
-// refetches keep the previous data on screen and swap it in when
-// the new read resolves — no flicker, no flash of zeros.
-// ─────────────────────────────────────────────────────────────
+// to the screen after logging water shows updated progress.
 import {
   AchievementsRepo,
   type AchievementView,
@@ -18,13 +11,9 @@ import { useSQLiteContext } from "expo-sqlite";
 import { useCallback, useState } from "react";
 
 export interface AchievementsResult {
-  /** True only until the first read resolves. */
   loading: boolean;
-  /** The hero achievement, or null before the first read. */
   hero: AchievementView | null;
-  /** Every non-hero achievement, in definition order. */
   badges: AchievementView[];
-  /** Manual refresh — rarely needed since focus handles it. */
   refresh: () => Promise<void>;
 }
 
@@ -37,8 +26,8 @@ export function useAchievements(): AchievementsResult {
   }>({ loading: true, achievements: [] });
 
   const refresh = useCallback(async () => {
-    const achievements = await AchievementsRepo.computeAchievements(db);
-    setState({ loading: false, achievements });
+    const { views } = await AchievementsRepo.computeAchievements(db);
+    setState({ loading: false, achievements: views });
   }, [db]);
 
   useFocusEffect(

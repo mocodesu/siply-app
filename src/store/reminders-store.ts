@@ -1,24 +1,19 @@
 // ─────────────────────────────────────────────────────────────
 // store/reminders-store.ts
 //
-// Owns the reminder list, the Smart Reminders preference, and the
-// OS-level scheduling side effects.
+// Pure data mirror. This store reads and writes SQLite only — it
+// performs NO OS scheduling. Every mutation that needs to touch the
+// OS goes through `useReminderActions`, which owns the transaction
+// across both layers.
 //
-// Toggling a reminder is optimistic: the local row flips first,
-// then the OS call runs, then the stored notification ID is
-// persisted. If scheduling fails (permission denied), the row
-// reverts so the UI never claims something is scheduled when it
-// isn't.
+// Splitting it this way means the store is trivially testable and
+// the scheduling logic lives in exactly one place.
 // ─────────────────────────────────────────────────────────────
 import {
   ReminderPrefsRepo,
   ReminderRepo,
   type Reminder,
 } from "@/repositories/reminder-repo";
-import {
-  cancelReminderAsync,
-  scheduleDailyReminderAsync,
-} from "@/utils/reminder-scheduler";
 import type { SQLiteDatabase } from "expo-sqlite";
 import { create } from "zustand";
 
@@ -29,11 +24,21 @@ interface RemindersStore {
   smartEnabled: boolean;
   isReady: boolean;
 
-  // ── Actions ───────────────────────────────────────────
+  // ── Lifecycle ─────────────────────────────────────────
   attach: (db: SQLiteDatabase) => void;
   refresh: () => Promise<void>;
-  setSmartEnabled: (enabled: boolean) => Promise<void>;
-  toggleReminder: (id: string) => Promise<void>;
+
+  // ── Data mutations (no OS side effects) ───────────────
+  setSmartEnabledLocal: (enabled: boolean) => Promise<void>;
+  setEnabledLocal: (id: string, enabled: boolean) => Promise<void>;
+  setNotificationIdLocal: (
+    id: string,
+    notificationId: string | null,
+  ) => Promise<void>;
+  insertLocal: (
+    reminder: Omit<Reminder, "notificationId" | "createdAt">,
+  ) => Promise<void>;
+  removeLocal: (id: string) => Promise<void>;
 }
 
 export const useRemindersStore = create<RemindersStore>((set, get) => ({
@@ -61,86 +66,52 @@ export const useRemindersStore = create<RemindersStore>((set, get) => ({
     set({ reminders, smartEnabled, isReady: true });
   },
 
-  setSmartEnabled: async (enabled) => {
+  setSmartEnabledLocal: async (enabled) => {
     const { db } = get();
     if (!db) return;
 
-    set({ smartEnabled: enabled });
     await ReminderPrefsRepo.setSmartEnabled(db, enabled);
+    set({ smartEnabled: enabled });
+  },
 
-    // When Smart Reminders turns off, cancel every scheduled
-    // notification but keep the rows so the user's configured
-    // times survive a re-enable.
-    if (!enabled) {
-      const { reminders } = get();
-      for (const reminder of reminders) {
-        await cancelReminderAsync(reminder.notificationId);
-        await ReminderRepo.setNotificationId(db, reminder.id, null);
-      }
-      set({
-        reminders: reminders.map((r) => ({ ...r, notificationId: null })),
-      });
-      return;
-    }
+  setEnabledLocal: async (id, enabled) => {
+    const { db } = get();
+    if (!db) return;
 
-    // Re-enabling: reschedule everything that's marked enabled.
-    const { reminders } = get();
-    for (const reminder of reminders) {
-      if (!reminder.enabled) continue;
-      const notificationId = await scheduleDailyReminderAsync(reminder);
-      if (notificationId) {
-        await ReminderRepo.setNotificationId(db, reminder.id, notificationId);
-      }
-    }
+    await ReminderRepo.setEnabled(db, id, enabled);
+    set({
+      reminders: get().reminders.map((r) =>
+        r.id === id ? { ...r, enabled } : r,
+      ),
+    });
+  },
 
+  setNotificationIdLocal: async (id, notificationId) => {
+    const { db } = get();
+    if (!db) return;
+
+    await ReminderRepo.setNotificationId(db, id, notificationId);
+    set({
+      reminders: get().reminders.map((r) =>
+        r.id === id ? { ...r, notificationId } : r,
+      ),
+    });
+  },
+
+  insertLocal: async (reminder) => {
+    const { db } = get();
+    if (!db) return;
+
+    await ReminderRepo.insert(db, reminder);
+    // Refresh so the new row lands in the correct sort order.
     await get().refresh();
   },
 
-  toggleReminder: async (id) => {
-    const { db, smartEnabled } = get();
+  removeLocal: async (id) => {
+    const { db } = get();
     if (!db) return;
 
-    const target = get().reminders.find((r) => r.id === id);
-    if (!target) return;
-
-    const nextEnabled = !target.enabled;
-
-    // Optimistic flip.
-    set({
-      reminders: get().reminders.map((r) =>
-        r.id === id ? { ...r, enabled: nextEnabled } : r,
-      ),
-    });
-
-    await ReminderRepo.setEnabled(db, id, nextEnabled);
-
-    // Smart Reminders off means the schedule is dormant — persist
-    // the preference without touching the OS.
-    if (!smartEnabled) return;
-
-    if (nextEnabled) {
-      const notificationId = await scheduleDailyReminderAsync({
-        ...target,
-        enabled: true,
-      });
-
-      if (notificationId) {
-        await ReminderRepo.setNotificationId(db, id, notificationId);
-      } else {
-        // Permission was denied — revert so the UI stays honest.
-        await ReminderRepo.setEnabled(db, id, false);
-        set({
-          reminders: get().reminders.map((r) =>
-            r.id === id ? { ...r, enabled: false } : r,
-          ),
-        });
-        return;
-      }
-    } else {
-      await cancelReminderAsync(target.notificationId);
-      await ReminderRepo.setNotificationId(db, id, null);
-    }
-
-    await get().refresh();
+    await ReminderRepo.remove(db, id);
+    set({ reminders: get().reminders.filter((r) => r.id !== id) });
   },
 }));

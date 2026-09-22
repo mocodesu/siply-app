@@ -61,6 +61,10 @@ export default function MainGroupLayout() {
         name="achievements"
         options={{ animation: "slide_from_right" }}
       />
+      <Stack.Screen
+        name="hydration-guide"
+        options={{ animation: "slide_from_right" }}
+      />
     </Stack>
   );
 }

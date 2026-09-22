@@ -1,6 +1,5 @@
-// ─────────────────────────────────────────────────────────────
 // app/_layout.tsx
-// ─────────────────────────────────────────────────────────────
+import { AchievementUnlockOverlay } from "@/components/achievement-unlock-overlay";
 import ThemedSystemBars from "@/components/themed-system-bars";
 import { initializeDatabase } from "@/db/client";
 import { useRetentionReminders } from "@/hooks/use-retention-reminders";
@@ -9,6 +8,7 @@ import { preloadSounds } from "@/utils/sounds";
 
 import { ThemePreferenceProvider } from "@/components/theme-preferences-provider";
 import { APP_NAME } from "@/constants";
+import { useHydrationStore } from "@/store/hydration-store";
 import { handleExpoUpdateMetadata } from "@/utils/expo-update-metadata";
 import { initializeUpdateChannel } from "@/utils/retention-reminder";
 import * as Sentry from "@sentry/react-native";
@@ -24,7 +24,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { sentryConfig } from "../../sentry.config";
 
 SplashScreen.preventAutoHideAsync().catch(() => {
-  // Already hidden — safe to ignore.
+  // Already hidden -- safe to ignore.
 });
 
 const navigationIntegration = Sentry.reactNavigationIntegration({
@@ -52,8 +52,11 @@ const RootLayout = () => {
 
   const [fontsLoaded, fontError] = useFonts(APP_FONT_MAP);
 
-  // Warm the audio players once so the first tap of a session
-  // doesn't pay the construction cost.
+  // Read the front of the unlock queue and its dismisser. Only
+  // this component re-renders when the queue changes.
+  const pendingUnlock = useHydrationStore((s) => s.pendingUnlocks[0] ?? null);
+  const dismissUnlock = useHydrationStore((s) => s.dismissUnlock);
+
   useEffect(() => {
     preloadSounds();
   }, []);
@@ -61,7 +64,7 @@ const RootLayout = () => {
   useEffect(() => {
     if (fontsLoaded || fontError) {
       SplashScreen.hideAsync().catch(() => {
-        // Already hidden — non-fatal.
+        // Already hidden -- non-fatal.
       });
     }
   }, [fontsLoaded, fontError]);
@@ -101,6 +104,20 @@ const RootLayout = () => {
               }}
             />
           </Stack>
+
+          {pendingUnlock && (
+            <AchievementUnlockOverlay
+              achievement={{
+                id: pendingUnlock.id,
+                title: pendingUnlock.title,
+                description: pendingUnlock.description,
+                icon: pendingUnlock.icon,
+              }}
+              onDismiss={dismissUnlock}
+              testID="achievement-unlock-overlay"
+            />
+          )}
+
           <ThemedSystemBars />
         </ThemePreferenceProvider>
       </SQLiteProvider>

@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 import { DailyTotalCard } from "@/components/daily-total-card";
 import { DateNavigator } from "@/components/date-navigator";
+import { FadeInView } from "@/components/fade-in";
 import { HistoryLogRow } from "@/components/history-log-row";
 import { IconButton } from "@/components/icon-button";
 import { ScrollScreen } from "@/components/screen";
@@ -98,29 +99,35 @@ export default function HistoryScreen() {
       />
 
       {logs.length === 0 ? (
-        <View style={styles.emptyState} testID="history-empty-state">
-          <Text variant="subhead" color="mutedText" textAlign="center">
-            No water logged for this day.
-          </Text>
-        </View>
+        <FadeInView>
+          <View style={styles.emptyState} testID="history-empty-state">
+            <Text variant="subhead" color="mutedText" textAlign="center">
+              No water logged for this day.
+            </Text>
+          </View>
+        </FadeInView>
       ) : (
-        <View style={styles.listCard} testID="history-log-list">
-          {logs.map((log) => (
-            <HistoryLogRow
-              key={log.id}
-              amountMl={log.amountMl}
-              loggedAt={log.loggedAt}
-              testID={`history-log-${log.id}`}
-            />
-          ))}
-        </View>
+        <FadeInView key={selectedDate.toISOString()}>
+          <View style={styles.listCard} testID="history-log-list">
+            {logs.map((log) => (
+              <HistoryLogRow
+                key={log.id}
+                amountMl={log.amountMl}
+                loggedAt={log.loggedAt}
+                testID={`history-log-${log.id}`}
+              />
+            ))}
+          </View>
+        </FadeInView>
       )}
 
-      <DailyTotalCard
-        totalMl={totalMl}
-        goalMl={goalMl}
-        testID="history-daily-total"
-      />
+      <FadeInView delay={80}>
+        <DailyTotalCard
+          totalMl={totalMl}
+          goalMl={goalMl}
+          testID="history-daily-total"
+        />
+      </FadeInView>
     </ScrollScreen>
   );
 }

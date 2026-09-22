@@ -1,6 +1,8 @@
-// ─────────────────────────────────────────────────────────────
 // repositories/reminder-repo.ts
-// ─────────────────────────────────────────────────────────────
+//
+// Reminder persistence. The row's own id doubles as the OS
+// notification identifier. See utils/reminder-scheduler.ts for
+// how scheduling uses it.
 import type { SQLiteDatabase } from "expo-sqlite";
 
 export interface Reminder {
@@ -9,7 +11,6 @@ export interface Reminder {
   hour: number;
   minute: number;
   enabled: boolean;
-  notificationId: string | null;
   createdAt: number;
 }
 
@@ -19,7 +20,6 @@ interface ReminderRow {
   hour: number;
   minute: number;
   enabled: number;
-  notification_id: string | null;
   created_at: number;
 }
 
@@ -29,15 +29,14 @@ const mapRow = (row: ReminderRow): Reminder => ({
   hour: row.hour,
   minute: row.minute,
   enabled: row.enabled === 1,
-  notificationId: row.notification_id,
   createdAt: row.created_at,
 });
 
 /**
- * Default schedule seeded on first launch. Matches the reference
- * design's reminder list. Times are local; the OS handles DST.
+ * Default schedule seeded on first launch. Times are local; the
+ * OS handles DST.
  */
-const SEED_REMINDERS: Omit<Reminder, "notificationId" | "createdAt">[] = [
+const SEED_REMINDERS: Omit<Reminder, "createdAt">[] = [
   { id: "rem-0900", label: "9:00 AM", hour: 9, minute: 0, enabled: true },
   { id: "rem-1130", label: "11:30 AM", hour: 11, minute: 30, enabled: true },
   { id: "rem-1400", label: "2:00 PM", hour: 14, minute: 0, enabled: true },
@@ -55,8 +54,8 @@ export const ReminderRepo = {
     const now = Date.now();
     for (const r of SEED_REMINDERS) {
       await db.runAsync(
-        `INSERT INTO reminders (id, label, hour, minute, enabled, notification_id, created_at)
-         VALUES (?, ?, ?, ?, ?, NULL, ?)`,
+        `INSERT INTO reminders (id, label, hour, minute, enabled, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
         r.id,
         r.label,
         r.hour,
@@ -69,7 +68,7 @@ export const ReminderRepo = {
 
   async getAll(db: SQLiteDatabase): Promise<Reminder[]> {
     const rows = await db.getAllAsync<ReminderRow>(
-      `SELECT id, label, hour, minute, enabled, notification_id, created_at
+      `SELECT id, label, hour, minute, enabled, created_at
        FROM reminders
        ORDER BY hour ASC, minute ASC`,
     );
@@ -88,25 +87,13 @@ export const ReminderRepo = {
     );
   },
 
-  async setNotificationId(
-    db: SQLiteDatabase,
-    id: string,
-    notificationId: string | null,
-  ): Promise<void> {
-    await db.runAsync(
-      `UPDATE reminders SET notification_id = ? WHERE id = ?`,
-      notificationId,
-      id,
-    );
-  },
-
   async insert(
     db: SQLiteDatabase,
-    reminder: Omit<Reminder, "notificationId" | "createdAt">,
+    reminder: Omit<Reminder, "createdAt">,
   ): Promise<void> {
     await db.runAsync(
-      `INSERT INTO reminders (id, label, hour, minute, enabled, notification_id, created_at)
-       VALUES (?, ?, ?, ?, ?, NULL, ?)`,
+      `INSERT INTO reminders (id, label, hour, minute, enabled, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       reminder.id,
       reminder.label,
       reminder.hour,
@@ -121,9 +108,9 @@ export const ReminderRepo = {
   },
 };
 
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 // Reminder preferences (key/value)
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 
 export const REMINDER_SMART_ENABLED_KEY = "reminders.smartEnabled";
 
@@ -133,7 +120,6 @@ export const ReminderPrefsRepo = {
       `SELECT value FROM reminder_preferences WHERE key = ?`,
       REMINDER_SMART_ENABLED_KEY,
     );
-    // Default to true — matches the reference design's "on" state.
     return row?.value !== "false";
   },
 

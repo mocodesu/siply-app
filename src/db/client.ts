@@ -1,14 +1,23 @@
 // ─────────────────────────────────────────────────────────────
 // db/client.ts
+//
+// Schema bootstrap. Single source of truth for the database
+// shape — `CREATE TABLE IF NOT EXISTS` is idempotent.
+//
+// ── During development ───────────────────────────────────────
+// When the schema below changes, `IF NOT EXISTS` means the old
+// tables survive and any new columns are silently missing. To
+// pick up a schema change, wipe the app's local storage:
+//
+//   iOS Simulator:  xcrun simctl uninstall booted <bundle-id>
+//   Android:        adb shell pm clear <package-name>
+//   Device:         delete and reinstall the app
+//
+// Or change the database filename in `app/_layout.tsx` — a new
+// name means a fresh database.
 // ─────────────────────────────────────────────────────────────
 import * as SQLite from "expo-sqlite";
 
-/**
- * Creates the schema on first launch. There are no migrations —
- * the app is new, so this is the single source of truth.
- * If you ever change the schema, bump the app version and
- * handle the transition explicitly in a rebuild path.
- */
 export async function initializeDatabase(db: SQLite.SQLiteDatabase) {
   await db.execAsync("PRAGMA journal_mode = WAL;");
   await db.execAsync("PRAGMA foreign_keys = ON;");
@@ -41,14 +50,15 @@ export async function initializeDatabase(db: SQLite.SQLiteDatabase) {
     );
 
     -- ── Reminders ──────────────────────────────────────────
+    -- The row's own  is used as the OS notification
+    -- identifier, so there is no separate column for it.
     CREATE TABLE IF NOT EXISTS reminders (
-      id              TEXT PRIMARY KEY NOT NULL,
-      label           TEXT NOT NULL,
-      hour            INTEGER NOT NULL,
-      minute          INTEGER NOT NULL,
-      enabled         INTEGER NOT NULL DEFAULT 1,
-      notification_id TEXT,
-      created_at      INTEGER NOT NULL
+      id         TEXT PRIMARY KEY NOT NULL,
+      label      TEXT NOT NULL,
+      hour       INTEGER NOT NULL,
+      minute     INTEGER NOT NULL,
+      enabled    INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL
     );
 
     -- ── App-level reminder preferences ─────────────────────
@@ -59,14 +69,10 @@ export async function initializeDatabase(db: SQLite.SQLiteDatabase) {
     );
 
     -- ── App settings (key/value) ───────────────────────────
-    -- Distinct from   so the hydration/reminder
-    -- namespaces stay isolated from user-facing app settings.
     -- Keys:
     --   settings.defaultCupSize  → "100" | "250" | "500"
     --   settings.units           → "ml" | "oz"
     --   settings.startDay        → "monday" | "sunday"
-    --   settings.appleHealth     → "true" | "false"
-    --   settings.googleFit       → "true" | "false"
     CREATE TABLE IF NOT EXISTS app_settings (
       key        TEXT PRIMARY KEY NOT NULL,
       value      TEXT NOT NULL,

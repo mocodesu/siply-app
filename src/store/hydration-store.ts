@@ -1,35 +1,41 @@
-// ─────────────────────────────────────────────────────────────
 // store/hydration-store.ts
 //
 // Global hydration state. Holds today's running total, goal, and
-// the recent logs list so any screen can render without prop
-// drilling. SQLite is the source of truth; the store mirrors it.
+// the recent logs list. SQLite is the source of truth; the store
+// mirrors it.
 //
-// The `db` reference is held in the store but never read by a
-// selector that drives rendering, so setting it causes no re-renders.
-// ─────────────────────────────────────────────────────────────
+// Also owns the achievement-unlock queue: whenever addWater runs,
+// it checks for fresh unlocks and pushes them here so the overlay
+// in the root layout can present them.
 import { dayKeyFromDate } from "@/constants/notifications";
+import {
+  AchievementsRepo,
+  type AchievementView,
+} from "@/repositories/achievements-repo";
 import { WaterRepo, type WaterLog } from "@/repositories/water-repo";
 import type { SQLiteDatabase } from "expo-sqlite";
 import { create } from "zustand";
 
 interface HydrationStore {
-  // ── State ─────────────────────────────────────────────
+  // State
   db: SQLiteDatabase | null;
   dayKey: string;
   totalMl: number;
   goalMl: number;
   recentLogs: WaterLog[];
   isReady: boolean;
-  /** Timestamp of the last successful add — useful for animation triggers. */
   lastAddedAt: number | null;
+  /** FIFO queue of achievements waiting to be celebrated. */
+  pendingUnlocks: AchievementView[];
 
-  // ── Actions ───────────────────────────────────────────
+  // Actions
   attach: (db: SQLiteDatabase) => void;
   refresh: () => Promise<void>;
   addWater: (amountMl: number, cupSizeMl?: number) => Promise<void>;
   removeLog: (id: number) => Promise<void>;
   setGoal: (goalMl: number) => Promise<void>;
+  /** Pop the front of the unlock queue. */
+  dismissUnlock: () => void;
 }
 
 const todayKey = () => dayKeyFromDate(new Date());
@@ -42,6 +48,7 @@ export const useHydrationStore = create<HydrationStore>((set, get) => ({
   recentLogs: [],
   isReady: false,
   lastAddedAt: null,
+  pendingUnlocks: [],
 
   attach: (db) => {
     set({ db });
@@ -75,6 +82,18 @@ export const useHydrationStore = create<HydrationStore>((set, get) => ({
     await WaterRepo.addWater(db, amountMl, cupSizeMl);
     set({ lastAddedAt: Date.now() });
     await get().refresh();
+
+    // Check for fresh unlocks. A failure here must not prevent the
+    // water log itself from being recorded -- that's already done.
+    try {
+      const { newlyUnlocked } = await AchievementsRepo.computeAchievements(db);
+      if (newlyUnlocked.length > 0) {
+        const current = get().pendingUnlocks;
+        set({ pendingUnlocks: [...current, ...newlyUnlocked] });
+      }
+    } catch (error) {
+      console.error("Achievement check failed:", error);
+    }
   },
 
   removeLog: async (id) => {
@@ -92,12 +111,11 @@ export const useHydrationStore = create<HydrationStore>((set, get) => ({
     await WaterRepo.setGoal(db, dayKey, goalMl);
     set({ goalMl });
   },
-}));
 
-// ─────────────────────────────────────────────────────────────
-// Selectors — all return primitives, so components only re-render
-// when the value they actually read changes.
-// ─────────────────────────────────────────────────────────────
+  dismissUnlock: () => {
+    set({ pendingUnlocks: get().pendingUnlocks.slice(1) });
+  },
+}));
 
 export const selectPercentage = (s: HydrationStore): number =>
   s.goalMl > 0 ? Math.min(1, s.totalMl / s.goalMl) : 0;
