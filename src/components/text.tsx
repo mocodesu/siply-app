@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 // components/Text.tsx — Unistyles v3, no legacy
 // ─────────────────────────────────────────────────────────────
+import { FONT_FAMILY_BY_WEIGHT, FontWeightKey } from "@/theme/fonts";
 import React, { FC } from "react";
 import { Text as RNText, TextProps, TextStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -48,15 +49,15 @@ interface CustomTextProps extends TextProps {
 // Fill in PostScript names when you add custom fonts.
 // Leave `undefined` to use the system font + fontWeight.
 // ─────────────────────────────────────────────────────────────
-const FONT_FAMILIES: Record<string, string | undefined> = {
-  light: undefined,
-  regular: undefined,
-  medium: undefined,
-  semibold: undefined,
-  bold: undefined,
+const FONT_FAMILIES: Record<FontWeightKey, string | undefined> = {
+  light: FONT_FAMILY_BY_WEIGHT.light,
+  regular: FONT_FAMILY_BY_WEIGHT.regular,
+  medium: FONT_FAMILY_BY_WEIGHT.medium,
+  semibold: FONT_FAMILY_BY_WEIGHT.semibold,
+  bold: FONT_FAMILY_BY_WEIGHT.bold,
 };
 
-const SYSTEM_WEIGHT: Record<string, TextStyle["fontWeight"]> = {
+const SYSTEM_WEIGHT: Record<FontWeightKey, TextStyle["fontWeight"]> = {
   light: "300",
   regular: "400",
   medium: "500",
@@ -81,14 +82,13 @@ const resolveWeightKey = (
   semibold?: boolean,
   medium?: boolean,
   light?: boolean,
-): keyof typeof FONT_FAMILIES | null => {
+): FontWeightKey | null => {
   if (bold) return "bold";
   if (semibold) return "semibold";
   if (medium) return "medium";
   if (light) return "light";
   return null;
 };
-
 // ─────────────────────────────────────────────────────────────
 // STYLES — v3: module scope, dynamic functions, bound to theme.
 // The Babel plugin parses this at build time and drives updates

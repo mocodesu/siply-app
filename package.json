@@ -1,11 +1,13 @@
 {
-  "name": "hydrator-app",
+  "name": "siply-app",
   "main": "index.ts",
   "version": "1.0.0",
   "dependencies": {
+    "@expo-google-fonts/nunito": "^0.4.2",
     "@expo/ui": "~57.0.19",
     "@expo/vector-icons": "^15.0.2",
     "@sentry/react-native": "~7.11.0",
+    "@shopify/react-native-skia": "2.6.2",
     "expo": "~57.0.24",
     "expo-blur": "~57.0.3",
     "expo-clipboard": "~57.0.2",
@@ -62,6 +64,7 @@
   },
   "private": true,
   "trustedDependencies": [
-    "@sentry/cli"
+    "@sentry/cli",
+    "@shopify/react-native-skia"
   ]
 }

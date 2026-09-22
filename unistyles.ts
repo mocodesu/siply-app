@@ -6,6 +6,7 @@ import {
   AppColorSchemeId,
   DEFAULT_SCHEME_ID,
 } from "@/theme/color-schemes";
+import { FONT_FAMILY } from "@/theme/fonts";
 import { StyleSheet } from "react-native-unistyles";
 
 // ═══════════════════════════════════════════════════════════
@@ -115,109 +116,94 @@ const SYSTEM = undefined as string | undefined; // SF Pro (iOS) / Roboto (Androi
 
 export const TYPE = {
   display: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.extraBold,
     fontSize: 34,
     lineHeight: 41,
     letterSpacing: -0.4,
-    fontWeight: "700",
   },
   h1: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.bold,
     fontSize: 28,
     lineHeight: 34,
     letterSpacing: -0.4,
-    fontWeight: "700",
   },
   h2: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.bold,
     fontSize: 22,
     lineHeight: 28,
     letterSpacing: -0.3,
-    fontWeight: "600",
   },
   h3: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.semibold,
     fontSize: 20,
     lineHeight: 25,
     letterSpacing: -0.2,
-    fontWeight: "600",
   },
   title: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.semibold,
     fontSize: 17,
     lineHeight: 22,
     letterSpacing: -0.2,
-    fontWeight: "600",
   },
   body: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.regular,
     fontSize: 17,
     lineHeight: 22,
     letterSpacing: -0.2,
-    fontWeight: "400",
   },
   bodyBold: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.semibold,
     fontSize: 17,
     lineHeight: 22,
     letterSpacing: -0.2,
-    fontWeight: "600",
   },
   callout: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.regular,
     fontSize: 16,
     lineHeight: 21,
     letterSpacing: -0.2,
-    fontWeight: "400",
   },
   subhead: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.regular,
     fontSize: 15,
     lineHeight: 20,
     letterSpacing: -0.1,
-    fontWeight: "400",
   },
   subheadBold: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.semibold,
     fontSize: 15,
     lineHeight: 20,
     letterSpacing: -0.1,
-    fontWeight: "600",
   },
   footnote: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.regular,
     fontSize: 13,
     lineHeight: 18,
     letterSpacing: 0,
-    fontWeight: "400",
   },
   caption: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.regular,
     fontSize: 12,
     lineHeight: 16,
     letterSpacing: 0,
-    fontWeight: "400",
   },
   micro: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.bold,
     fontSize: 11,
     lineHeight: 13,
     letterSpacing: 0.6,
-    fontWeight: "600",
   },
   cookingStep: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.medium,
     fontSize: 24,
     lineHeight: 32,
     letterSpacing: -0.3,
-    fontWeight: "500",
   },
   cookingTimer: {
-    fontFamily: SYSTEM,
+    fontFamily: FONT_FAMILY.extraLight,
     fontSize: 56,
     lineHeight: 60,
     letterSpacing: -1.5,
-    fontWeight: "200",
   },
 } as const;
 

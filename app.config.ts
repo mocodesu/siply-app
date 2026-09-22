@@ -11,14 +11,14 @@ import {
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-const EAS_PROJECT_ID = "e043e157-97dd-4185-a931-f550b7dbc68a";
-const PROJECT_SLUG = "template";
+const EAS_PROJECT_ID = "";
+const PROJECT_SLUG = "siply";
 const OWNER = "mocodesu";
 
 /**
  * App identity
  */
-const APP_NAME = "Starter Template";
+const APP_NAME = "Siply";
 const BUNDLE_IDENTIFIER = `com.${OWNER}.${PROJECT_SLUG}`;
 const PACKAGE_NAME = `com.${OWNER}.${PROJECT_SLUG}`;
 const SCHEME = PROJECT_SLUG;
