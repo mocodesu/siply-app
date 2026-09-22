@@ -1,21 +1,21 @@
-// ─────────────────────────────────────────────────────────────
 // components/segmented-control.tsx
 //
-// Custom animated segmented control. The reference design shows a
-// filled blue pill that slides between segments — the native
-// `@expo/ui` segmented control can't produce that look, so this is
-// hand-rolled with Reanimated.
+// Animated segmented control. The indicator slides on the UI
+// thread between segment positions.
 //
-// The indicator slides on the UI thread. Tapping a segment updates
-// the parent's state, which flows back down as `value`; the effect
-// then animates the indicator to the new position.
-// ─────────────────────────────────────────────────────────────
+// Animation is driven by useAnimatedReaction rather than a
+// useEffect. The reaction fires only when the observed shared
+// values actually change, and it re-targets the animation cleanly
+// from wherever the pill currently is. This avoids the class of
+// bug where a mid-animation re-render caused withTiming to restart
+// from a stale position and the pill visibly jumped backwards.
 import { HapticPressable } from "@/components/Haptic-pressable";
 import Text from "@/components/text";
 import React, { useCallback, useEffect, useState } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
 import Animated, {
   Easing,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -30,15 +30,10 @@ export interface Segment<T extends string> {
 }
 
 export interface SegmentedControlProps<T extends string> {
-  /** The segments to display, in order. */
   segments: readonly Segment<T>[];
-  /** The currently selected segment key. */
   value: T;
-  /** Fires with the new key when the user taps a segment. */
   onChange: (key: T) => void;
-  /** Test identifier forwarded to the outer View. */
   testID?: string;
-  /** Accessibility label for the whole control. */
   accessibilityLabel?: string;
 }
 
@@ -50,36 +45,76 @@ export function SegmentedControl<T extends string>({
   accessibilityLabel = "View period",
 }: SegmentedControlProps<T>) {
   const [containerWidth, setContainerWidth] = useState(0);
-  const translateX = useSharedValue(0);
 
   const selectedIndex = Math.max(
     0,
     segments.findIndex((s) => s.key === value),
   );
+
   const segmentWidth =
     containerWidth > 0 && segments.length > 0
       ? containerWidth / segments.length
       : 0;
 
+  // Shared values mirror the props so the reaction below can read
+  // current values without capturing stale closures.
+  const indexShared = useSharedValue(selectedIndex);
+  const widthShared = useSharedValue(segmentWidth);
+
+  // The animated X position of the indicator.
+  const translateX = useSharedValue(0);
+
+  // True once the pill has been positioned for the first time.
+  // Used to snap on the initial layout instead of animating from
+  // an arbitrary starting point.
+  const hasPositioned = useSharedValue(false);
+
   useEffect(() => {
-    if (segmentWidth <= 0) return;
-    translateX.value = withTiming(selectedIndex * segmentWidth, {
-      duration: SLIDE_DURATION,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [selectedIndex, segmentWidth, translateX]);
+    indexShared.value = selectedIndex;
+  }, [selectedIndex, indexShared]);
+
+  useEffect(() => {
+    widthShared.value = segmentWidth;
+  }, [segmentWidth, widthShared]);
+
+  useAnimatedReaction(
+    () => ({
+      index: indexShared.value,
+      width: widthShared.value,
+    }),
+    (current, previous) => {
+      if (current.width <= 0) return;
+
+      const target = current.index * current.width;
+
+      // Snap on the first valid measurement. Animating from 0
+      // here would cause a visible slide on mount.
+      if (!hasPositioned.value) {
+        translateX.value = target;
+        hasPositioned.value = true;
+        return;
+      }
+
+      const previousIndex = previous?.index ?? -1;
+      const previousWidth = previous?.width ?? 0;
+
+      if (current.index !== previousIndex || current.width !== previousWidth) {
+        translateX.value = withTiming(target, {
+          duration: SLIDE_DURATION,
+          easing: Easing.out(Easing.cubic),
+        });
+      }
+    },
+  );
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     setContainerWidth(event.nativeEvent.layout.width);
   }, []);
 
-  const indicatorStyle = useAnimatedStyle(
-    () => ({
-      width: segmentWidth,
-      transform: [{ translateX: translateX.value }],
-    }),
-    [segmentWidth],
-  );
+  const indicatorStyle = useAnimatedStyle(() => ({
+    width: widthShared.value,
+    transform: [{ translateX: translateX.value }],
+  }));
 
   return (
     <View

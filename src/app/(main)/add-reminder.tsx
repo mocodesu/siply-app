@@ -1,26 +1,28 @@
-// ─────────────────────────────────────────────────────────────
 // app/(main)/add-reminder.tsx
 //
-// Now schedules the OS notification on save instead of only
-// writing to SQLite. Surfaces permission failures inline rather
-// than silently creating a row that never fires.
-// ─────────────────────────────────────────────────────────────
+// Add Reminder modal. Reads busy from the reminders store rather
+// than from useReminderActions, so the button reflects the actual
+// scheduling state of the id being saved.
 import { IconButton } from "@/components/icon-button";
 import { PrimaryButton } from "@/components/primary-button";
 import { ScrollScreen } from "@/components/screen";
 import Text from "@/components/text";
 import { TimePicker, type Meridiem } from "@/components/time-picker";
 import { useReminderActions } from "@/hooks/use-reminder-actions";
-import { useRemindersStore } from "@/store/reminders-store";
+import {
+  selectAnyBusy,
+  selectReminders,
+  useRemindersStore,
+} from "@/store/reminders-store";
 import { feedback } from "@/utils/haptics";
 import { router } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
-// ─────────────────────────────────────────────────────────────
-// Time conversion
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
+// Time helpers
+// -------------------------------------------------------------
 
 function to24Hour(hour12: number, meridiem: Meridiem): number {
   if (meridiem === "AM") return hour12 === 12 ? 0 : hour12;
@@ -35,40 +37,32 @@ function reminderId(hour24: number, minute: number): string {
   return `rem-${String(hour24).padStart(2, "0")}${String(minute).padStart(2, "0")}`;
 }
 
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 // Screen
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 
 export default function AddReminderScreen() {
-  const existing = useRemindersStore((s) => s.reminders);
-  const { addReminder, busy } = useReminderActions();
+  const existing = useRemindersStore(selectReminders);
+  const busy = useRemindersStore(selectAnyBusy);
+  const { addReminder } = useReminderActions();
 
   const [hour12, setHour12] = useState(10);
   const [minute, setMinute] = useState(0);
   const [meridiem, setMeridiem] = useState<Meridiem>("AM");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const hour24 = useMemo(() => to24Hour(hour12, meridiem), [hour12, meridiem]);
+  const hour24 = to24Hour(hour12, meridiem);
+  const label = formatTimeLabel(hour12, minute, meridiem);
+  const id = reminderId(hour24, minute);
 
-  const label = useMemo(
-    () => formatTimeLabel(hour12, minute, meridiem),
-    [hour12, minute, meridiem],
-  );
+  const isDuplicate = existing.some((r) => r.id === id);
 
-  const id = useMemo(() => reminderId(hour24, minute), [hour24, minute]);
-  const isDuplicate = useMemo(
-    () => existing.some((r) => r.id === id),
-    [existing, id],
-  );
-
-  // ── Handlers ────────────────────────────────────────────
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     if (router.canGoBack()) router.back();
-  }, []);
+  };
 
-  const handleSave = useCallback(async () => {
+  const handleSave = async () => {
     if (isDuplicate || busy) return;
-
     setErrorMessage(null);
 
     const result = await addReminder({
@@ -95,7 +89,7 @@ export default function AddReminderScreen() {
     } else {
       setErrorMessage("Couldn't save this reminder. Please try again.");
     }
-  }, [addReminder, id, label, hour24, minute, isDuplicate, busy]);
+  };
 
   const header = (
     <View style={styles.headerRow}>
@@ -125,7 +119,6 @@ export default function AddReminderScreen() {
 
   return (
     <ScrollScreen header={header} testID="add-reminder-screen">
-      {/* ── Preview ─────────────────────────────────────── */}
       <View style={styles.preview}>
         <Text variant="display" color="primary" textAlign="center">
           {label}
@@ -139,7 +132,6 @@ export default function AddReminderScreen() {
         </Text>
       </View>
 
-      {/* ── Picker ──────────────────────────────────────── */}
       <TimePicker
         hour12={hour12}
         minute={minute}
@@ -153,7 +145,6 @@ export default function AddReminderScreen() {
         testIDPrefix="add-reminder"
       />
 
-      {/* ── Save ────────────────────────────────────────── */}
       <PrimaryButton
         label={busy ? "Saving…" : "Save Reminder"}
         onPress={() => {
@@ -165,6 +156,10 @@ export default function AddReminderScreen() {
     </ScrollScreen>
   );
 }
+
+// -------------------------------------------------------------
+// Styles
+// -------------------------------------------------------------
 
 const styles = StyleSheet.create((theme) => ({
   headerRow: {

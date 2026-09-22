@@ -14,7 +14,7 @@ const TabLayout = () => {
     <NativeTabs
       iconColor={{
         default: theme.colors.mutedText,
-        selected: theme.colors.primary,
+        selected: theme.colors.onPrimary,
       }}
       labelStyle={{
         default: { color: theme.colors.mutedText },

@@ -1,26 +1,12 @@
-// ─────────────────────────────────────────────────────────────
 // utils/reminder-scheduler.ts
 //
-// Wraps expo-notifications so the rest of the app never touches
-// identifiers, permissions, or platform quirks directly.
-//
-// Every function returns a discriminated result rather than
-// throwing, so callers can render precise error states instead of
-// a generic "something went wrong".
-//
-// Local notifications work in Expo Go. Push notifications require
-// a dev build from SDK 53+, but this module only schedules local
-// notifications.
-// ─────────────────────────────────────────────────────────────
+// Wraps expo-notifications. The reminder's own id is used as the
+// OS notification identifier. See utils/haptics.ts for how the
+// haptic + sound layer hooks in.
+import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
-import * as Notifications from "expo-notifications";
-
 import type { Reminder } from "@/repositories/reminder-repo";
-
-// ─────────────────────────────────────────────────────────────
-// Channel configuration
-// ─────────────────────────────────────────────────────────────
 
 export const REMINDER_CHANNEL_ID = "hydration-reminders";
 
@@ -31,24 +17,16 @@ const CHANNEL_DESCRIPTION =
 const REMINDER_TITLE = "Time to hydrate";
 const REMINDER_BODY = "A glass of water now keeps your energy steady.";
 
-// ─────────────────────────────────────────────────────────────
-// Result types
-// ─────────────────────────────────────────────────────────────
-
 export type ScheduleResult =
-  | { ok: true; notificationId: string }
+  | { ok: true }
   | { ok: false; reason: "permission-denied" | "error" };
 
 export type PermissionState = "granted" | "denied" | "undetermined";
 
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 // Channel + permission
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 
-/**
- * Creates the Android channel. Safe to call repeatedly — the OS
- * no-ops when a channel with this ID already exists.
- */
 export async function ensureReminderChannelAsync(): Promise<void> {
   if (Platform.OS !== "android") return;
 
@@ -66,10 +44,6 @@ export async function ensureReminderChannelAsync(): Promise<void> {
   }
 }
 
-/**
- * Reads the current permission state without prompting. Use this
- * to render status indicators.
- */
 export async function getReminderPermissionState(): Promise<PermissionState> {
   if (Platform.OS === "web") return "denied";
 
@@ -79,10 +53,6 @@ export async function getReminderPermissionState(): Promise<PermissionState> {
   return "denied";
 }
 
-/**
- * Requests permission only if it hasn't been granted and the user
- * can still be asked. Never loops on denial.
- */
 export async function ensureReminderPermissionAsync(): Promise<boolean> {
   if (Platform.OS === "web") return false;
 
@@ -91,26 +61,26 @@ export async function ensureReminderPermissionAsync(): Promise<boolean> {
   if (!current.canAskAgain) return false;
 
   const requested = await Notifications.requestPermissionsAsync({
-    ios: {
-      allowAlert: true,
-      allowSound: true,
-      allowBadge: false,
-    },
+    ios: { allowAlert: true, allowSound: true, allowBadge: false },
   });
 
   return requested.status === "granted";
 }
 
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 // Scheduling
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 
 /**
- * Schedules one repeating daily notification for a reminder.
+ * Schedules one repeating daily notification using the reminder's
+ * own id as the OS identifier.
  *
- * `type: SchedulableTriggerInputTypes.DAILY` is mandatory — without
- * it, Expo treats the trigger as immediate and fires the
- * notification the instant it's scheduled.
+ * Cancels any existing notification with the same identifier
+ * first. Without this, rescheduling after a settings change can
+ * fail on some platforms with a duplicate-identifier error.
+ *
+ * SchedulableTriggerInputTypes.DAILY is mandatory. Without the
+ * explicit type field, Expo treats the trigger as immediate.
  */
 export async function scheduleReminderAsync(
   reminder: Reminder,
@@ -120,14 +90,21 @@ export async function scheduleReminderAsync(
   }
 
   const granted = await ensureReminderPermissionAsync();
-  if (!granted) {
-    return { ok: false, reason: "permission-denied" };
-  }
+  if (!granted) return { ok: false, reason: "permission-denied" };
 
   await ensureReminderChannelAsync();
 
+  // Cancel any existing registration under this identifier.
+  // Cancelling a non-existent id is a no-op.
   try {
-    const notificationId = await Notifications.scheduleNotificationAsync({
+    await Notifications.cancelScheduledNotificationAsync(reminder.id);
+  } catch {
+    // Fine -- nothing was scheduled.
+  }
+
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: reminder.id,
       content: {
         title: REMINDER_TITLE,
         body: REMINDER_BODY,
@@ -142,53 +119,34 @@ export async function scheduleReminderAsync(
       },
     });
 
-    return { ok: true, notificationId };
+    return { ok: true };
   } catch (error) {
     console.error("Failed to schedule reminder:", error);
     return { ok: false, reason: "error" };
   }
 }
 
-/**
- * Cancels a scheduled notification. Swallows unknown identifiers —
- * the OS throws if the ID no longer exists, which is expected after
- * a reinstall or a data reset.
- */
-export async function cancelReminderAsync(
-  notificationId: string | null,
-): Promise<void> {
-  if (!notificationId) return;
+export async function cancelReminderAsync(reminderId: string): Promise<void> {
   try {
-    await Notifications.cancelScheduledNotificationAsync(notificationId);
+    await Notifications.cancelScheduledNotificationAsync(reminderId);
   } catch {
-    // Already gone — nothing to do.
+    // Already gone -- nothing to do.
   }
 }
 
-/**
- * Cancels every scheduled hydration reminder in one call, then
- * verifies the OS state actually cleared.
- *
- * Used when Smart Reminders is turned off. Returns the number of
- * notifications that were still scheduled after the cancel pass —
- * a non-zero value means something went wrong and the caller should
- * surface it.
- */
 export async function cancelAllRemindersAsync(
-  notificationIds: readonly (string | null)[],
+  reminderIds: readonly string[],
 ): Promise<number> {
-  await Promise.all(notificationIds.map(cancelReminderAsync));
+  await Promise.all(reminderIds.map(cancelReminderAsync));
 
   try {
     const remaining = await Notifications.getAllScheduledNotificationsAsync();
-    const ourPrefix = "hydration-reminder";
-    const stragglers = remaining.filter(
-      (n) => (n.content.data as { type?: string } | null)?.type === ourPrefix,
-    );
-    return stragglers.length;
+    return remaining.filter(
+      (n) =>
+        (n.content.data as { type?: string } | null)?.type ===
+        "hydration-reminder",
+    ).length;
   } catch {
-    // Can't verify — report zero so the caller doesn't block on a
-    // read failure that may be transient.
     return 0;
   }
 }

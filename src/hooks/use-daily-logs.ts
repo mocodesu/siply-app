@@ -1,15 +1,16 @@
-// ─────────────────────────────────────────────────────────────
 // hooks/use-daily-logs.ts
 //
-// Fetches a single day's logs and summary. Refetches on screen
-// focus so returning to the History tab after logging water shows
-// the new entry without manual refresh.
+// Two independent hooks: one for a day's water logs, one for the
+// day's summary. Consumers subscribe to only the one they render.
 //
-// Stale-data guard: when `date` changes, the previous day's logs
-// are hidden immediately rather than briefly shown under the new
-// date label. SQLite is fast enough that the correct data arrives
-// in the same frame as the user's tap.
-// ─────────────────────────────────────────────────────────────
+// Both hooks:
+//   - refetch on screen focus, so returning after logging shows
+//     fresh data without a manual refresh
+//   - refuse to overwrite state when the fetched content is
+//     identical to what's already stored, so a focus refetch that
+//     returns the same rows does not cause any re-renders
+//   - guard against out-of-order fetches when the day changes
+//     mid-request
 import { dayKeyFromDate } from "@/constants/notifications";
 import {
   WaterRepo,
@@ -18,53 +19,120 @@ import {
 } from "@/repositories/water-repo";
 import { useFocusEffect } from "expo-router";
 import { useSQLiteContext } from "expo-sqlite";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
-interface DailyLogsState {
-  dayKey: string;
-  logs: WaterLog[];
-  summary: DailySummary | null;
-  loading: boolean;
+// -------------------------------------------------------------
+// Equality checks
+//
+// Hand-rolled rather than deep-equal, because the field set is
+// small and fixed. Cheap enough to run on every focus.
+// -------------------------------------------------------------
+
+function areLogsEqual(a: WaterLog[], b: WaterLog[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+
+  for (let i = 0; i < a.length; i++) {
+    if (
+      a[i].id !== b[i].id ||
+      a[i].amountMl !== b[i].amountMl ||
+      a[i].loggedAt !== b[i].loggedAt
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
-export interface DailyLogsResult {
-  logs: WaterLog[];
-  summary: DailySummary | null;
-  loading: boolean;
-  refresh: () => Promise<void>;
+function areSummariesEqual(
+  a: DailySummary | null,
+  b: DailySummary | null,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+
+  return (
+    a.dayKey === b.dayKey &&
+    a.totalMl === b.totalMl &&
+    a.goalMl === b.goalMl &&
+    a.logCount === b.logCount
+  );
 }
 
-export function useDailyLogs(date: Date): DailyLogsResult {
+// -------------------------------------------------------------
+// useDailyLogs
+// -------------------------------------------------------------
+
+export function useDailyLogs(dayMs: number): WaterLog[] {
   const db = useSQLiteContext();
-  const dayKey = dayKeyFromDate(date);
+  const dayKey = dayKeyFromDate(new Date(dayMs));
+  const [logs, setLogs] = useState<WaterLog[]>([]);
 
-  const [state, setState] = useState<DailyLogsState>({
-    dayKey,
-    logs: [],
-    summary: null,
-    loading: true,
-  });
-
-  const refresh = useCallback(async () => {
-    const [logs, summary] = await Promise.all([
-      WaterRepo.getRecentLogs(db, dayKey),
-      WaterRepo.getDailySummary(db, dayKey),
-    ]);
-    setState({ dayKey, logs, summary, loading: false });
-  }, [db, dayKey]);
+  // Tracks the last requested day. If a fetch resolves after the
+  // user has navigated elsewhere, its result is discarded.
+  const requestedDayRef = useRef<string>("");
 
   useFocusEffect(
     useCallback(() => {
-      void refresh();
-    }, [refresh]),
+      let cancelled = false;
+      const isDayChange = requestedDayRef.current !== dayKey;
+      requestedDayRef.current = dayKey;
+
+      // Clear immediately on day change so yesterday's logs don't
+      // flash under today's label.
+      if (isDayChange) {
+        setLogs((prev) => (prev.length === 0 ? prev : []));
+      }
+
+      void (async () => {
+        const next = await WaterRepo.getRecentLogs(db, dayKey);
+        if (cancelled) return;
+        if (requestedDayRef.current !== dayKey) return;
+        setLogs((prev) => (areLogsEqual(prev, next) ? prev : next));
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [db, dayKey]),
   );
 
-  const isStale = state.dayKey !== dayKey;
+  return logs;
+}
 
-  return {
-    logs: isStale ? [] : state.logs,
-    summary: isStale ? null : state.summary,
-    loading: isStale || state.loading,
-    refresh,
-  };
+// -------------------------------------------------------------
+// useDailySummary
+// -------------------------------------------------------------
+
+export function useDailySummary(dayMs: number): DailySummary | null {
+  const db = useSQLiteContext();
+  const dayKey = dayKeyFromDate(new Date(dayMs));
+  const [summary, setSummary] = useState<DailySummary | null>(null);
+
+  const requestedDayRef = useRef<string>("");
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const isDayChange = requestedDayRef.current !== dayKey;
+      requestedDayRef.current = dayKey;
+
+      if (isDayChange) {
+        setSummary((prev) => (prev === null ? prev : null));
+      }
+
+      void (async () => {
+        const next = await WaterRepo.getDailySummary(db, dayKey);
+        if (cancelled) return;
+        if (requestedDayRef.current !== dayKey) return;
+        setSummary((prev) => (areSummariesEqual(prev, next) ? prev : next));
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [db, dayKey]),
+  );
+
+  return summary;
 }

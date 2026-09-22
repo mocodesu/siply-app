@@ -1,14 +1,13 @@
-// ─────────────────────────────────────────────────────────────
 // components/daily-total-card.tsx
 //
-// Unit-aware — total and goal render in the user's chosen unit.
-// ─────────────────────────────────────────────────────────────
+// Daily summary tile for the History screen: total on the left,
+// a compact progress ring on the right.
 import { HydrationRing } from "@/components/hydration-ring";
 import Text from "@/components/text";
-import { useSettingsStore } from "@/store/settings-store";
+import { selectUnits, useSettingsStore } from "@/store/settings-store";
 import { formatVolume } from "@/utils/format";
 import React from "react";
-import { View, type ViewStyle } from "react-native";
+import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
 const RING_SIZE = 76;
@@ -17,21 +16,20 @@ const RING_STROKE = 7;
 export interface DailyTotalCardProps {
   totalMl: number;
   goalMl: number;
-  style?: ViewStyle;
   testID?: string;
 }
 
 export function DailyTotalCard({
   totalMl,
   goalMl,
-  style,
   testID,
 }: DailyTotalCardProps) {
-  const units = useSettingsStore((s) => s.units);
+  const units = useSettingsStore(selectUnits);
   const percentage = goalMl > 0 ? Math.min(1, totalMl / goalMl) : 0;
+  const percentageInt = Math.round(percentage * 100);
 
   return (
-    <View testID={testID} style={[styles.card, style]}>
+    <View testID={testID} style={styles.card}>
       <View style={styles.textBlock}>
         <Text variant="caption" color="mutedText">
           Daily Total
@@ -55,12 +53,10 @@ export function DailyTotalCard({
         size={RING_SIZE}
         strokeWidth={RING_STROKE}
         testID={testID ? `${testID}-ring` : undefined}
-        accessibilityLabel={`${Math.round(
-          percentage * 100,
-        )}% of daily goal reached`}
+        accessibilityLabel={`${percentageInt}% of daily goal reached`}
       >
         <Text variant="micro" color="primary">
-          {Math.round(percentage * 100)}%
+          {percentageInt}%
         </Text>
       </HydrationRing>
     </View>

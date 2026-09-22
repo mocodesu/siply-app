@@ -1,12 +1,11 @@
 // store/hydration-store.ts
 //
-// Global hydration state. Holds today's running total, goal, and
-// the recent logs list. SQLite is the source of truth; the store
-// mirrors it.
+// Global hydration state plus the achievement-unlock queue.
 //
-// Also owns the achievement-unlock queue: whenever addWater runs,
-// it checks for fresh unlocks and pushes them here so the overlay
-// in the root layout can present them.
+// Atomic selectors are exported alongside the store so components
+// subscribe to the narrowest slice possible. Each selector returns
+// a primitive, which Zustand compares with Object.is -- the fastest
+// equality check available.
 import { dayKeyFromDate } from "@/constants/notifications";
 import {
   AchievementsRepo,
@@ -16,8 +15,11 @@ import { WaterRepo, type WaterLog } from "@/repositories/water-repo";
 import type { SQLiteDatabase } from "expo-sqlite";
 import { create } from "zustand";
 
+// -------------------------------------------------------------
+// Types
+// -------------------------------------------------------------
+
 interface HydrationStore {
-  // State
   db: SQLiteDatabase | null;
   dayKey: string;
   totalMl: number;
@@ -25,18 +27,19 @@ interface HydrationStore {
   recentLogs: WaterLog[];
   isReady: boolean;
   lastAddedAt: number | null;
-  /** FIFO queue of achievements waiting to be celebrated. */
   pendingUnlocks: AchievementView[];
 
-  // Actions
   attach: (db: SQLiteDatabase) => void;
   refresh: () => Promise<void>;
   addWater: (amountMl: number, cupSizeMl?: number) => Promise<void>;
   removeLog: (id: number) => Promise<void>;
   setGoal: (goalMl: number) => Promise<void>;
-  /** Pop the front of the unlock queue. */
   dismissUnlock: () => void;
 }
+
+// -------------------------------------------------------------
+// Store
+// -------------------------------------------------------------
 
 const todayKey = () => dayKeyFromDate(new Date());
 
@@ -83,8 +86,6 @@ export const useHydrationStore = create<HydrationStore>((set, get) => ({
     set({ lastAddedAt: Date.now() });
     await get().refresh();
 
-    // Check for fresh unlocks. A failure here must not prevent the
-    // water log itself from being recorded -- that's already done.
     try {
       const { newlyUnlocked } = await AchievementsRepo.computeAchievements(db);
       if (newlyUnlocked.length > 0) {
@@ -99,7 +100,6 @@ export const useHydrationStore = create<HydrationStore>((set, get) => ({
   removeLog: async (id) => {
     const { db } = get();
     if (!db) return;
-
     await WaterRepo.deleteLog(db, id);
     await get().refresh();
   },
@@ -107,7 +107,6 @@ export const useHydrationStore = create<HydrationStore>((set, get) => ({
   setGoal: async (goalMl) => {
     const { db, dayKey } = get();
     if (!db) return;
-
     await WaterRepo.setGoal(db, dayKey, goalMl);
     set({ goalMl });
   },
@@ -117,5 +116,34 @@ export const useHydrationStore = create<HydrationStore>((set, get) => ({
   },
 }));
 
+// -------------------------------------------------------------
+// Atomic selectors
+//
+// Every selector below returns a primitive. Components that use
+// them re-render only when that exact value changes.
+// -------------------------------------------------------------
+
+export const selectTotalMl = (s: HydrationStore): number => s.totalMl;
+export const selectGoalMl = (s: HydrationStore): number => s.goalMl;
+export const selectIsReady = (s: HydrationStore): boolean => s.isReady;
+
+/** 0-1 progress ratio. Derived, but still a primitive. */
 export const selectPercentage = (s: HydrationStore): number =>
   s.goalMl > 0 ? Math.min(1, s.totalMl / s.goalMl) : 0;
+
+/** Integer percentage for display. Avoids re-rendering on sub-1% changes. */
+export const selectPercentageInt = (s: HydrationStore): number =>
+  s.goalMl > 0 ? Math.round(Math.min(1, s.totalMl / s.goalMl) * 100) : 0;
+
+/** Boolean -- true when the current day's total meets or exceeds the goal. */
+export const selectGoalReached = (s: HydrationStore): boolean =>
+  s.goalMl > 0 && s.totalMl >= s.goalMl;
+
+/** First item in the unlock queue, or null. */
+export const selectPendingUnlock = (
+  s: HydrationStore,
+): AchievementView | null => s.pendingUnlocks[0] ?? null;
+
+/** Count of queued unlocks. Primitive so the root layout can cheaply detect arrivals. */
+export const selectPendingUnlockCount = (s: HydrationStore): number =>
+  s.pendingUnlocks.length;

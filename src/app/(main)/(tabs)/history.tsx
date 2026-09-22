@@ -1,9 +1,20 @@
-// ─────────────────────────────────────────────────────────────
-// app/(tabs)/history.tsx — History
+// app/(tabs)/history.tsx
 //
-// The calendar icon now opens the calendar picker modal. The
-// selected date comes back via the UI store, consumed on focus.
-// ─────────────────────────────────────────────────────────────
+// Composed of four independent modules. Each subscribes to exactly
+// the state it renders:
+//
+//   HistoryHeader      -- no subscriptions, mounts once
+//   HistoryDateSection -- subscribes to selectedHistoryDayMs
+//   HistoryLogSection  -- subscribes to selectedHistoryDayMs and
+//                         its logs; re-renders only when the log
+//                         list content changes
+//   HistoryTotalSection -- subscribes to selectedHistoryDayMs and
+//                          its summary; re-renders only when the
+//                          summary content changes
+//
+// React Compiler is enabled in app.config.ts, so manual useMemo,
+// useCallback, and React.memo are omitted unless an integration
+// contract requires a stable reference.
 import { DailyTotalCard } from "@/components/daily-total-card";
 import { DateNavigator } from "@/components/date-navigator";
 import { FadeInView } from "@/components/fade-in";
@@ -12,63 +23,43 @@ import { IconButton } from "@/components/icon-button";
 import { ScrollScreen } from "@/components/screen";
 import Text from "@/components/text";
 import { dayKeyFromDate } from "@/constants/notifications";
-import { useDailyLogs } from "@/hooks/use-daily-logs";
+import { useDailyLogs, useDailySummary } from "@/hooks/use-daily-logs";
 import { DEFAULT_GOAL_ML } from "@/repositories/water-repo";
-import { useUIStore } from "@/store/ui-store";
+import { selectSelectedHistoryDayMs, useUIStore } from "@/store/ui-store";
 import { addDays, isAfterDay, startOfDay } from "@/utils/date";
-import { router, useFocusEffect } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import { router } from "expo-router";
+import React from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
+// -------------------------------------------------------------
+// Screen
+// -------------------------------------------------------------
+
 export default function HistoryScreen() {
-  const [selectedDate, setSelectedDate] = useState<Date>(() =>
-    startOfDay(new Date()),
+  return (
+    <ScrollScreen header={<HistoryHeader />} testID="history-screen">
+      <HistoryDateSection />
+      <HistoryLogSection />
+      <HistoryTotalSection />
+    </ScrollScreen>
   );
+}
 
-  const today = useMemo(() => startOfDay(new Date()), []);
+// -------------------------------------------------------------
+// Header
+//
+// No subscriptions. Renders once.
+// -------------------------------------------------------------
 
-  const { logs, summary } = useDailyLogs(selectedDate);
+function HistoryHeader() {
+  const handleOpenCalendar = () => {
+    const dayMs = useUIStore.getState().selectedHistoryDayMs;
+    const key = dayKeyFromDate(new Date(dayMs));
+    router.push({ pathname: "/calendar", params: { initialDate: key } });
+  };
 
-  const totalMl = summary?.totalMl ?? 0;
-  const goalMl = summary?.goalMl ?? DEFAULT_GOAL_ML;
-
-  // ── Consume pending date from the calendar picker ───────
-  const pendingHistoryDate = useUIStore((s) => s.pendingHistoryDate);
-  const setPendingHistoryDate = useUIStore((s) => s.setPendingHistoryDate);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (pendingHistoryDate) {
-        setSelectedDate(startOfDay(pendingHistoryDate));
-        setPendingHistoryDate(null);
-      }
-    }, [pendingHistoryDate, setPendingHistoryDate]),
-  );
-
-  // ── Navigation ──────────────────────────────────────────
-  const handlePrev = useCallback(() => {
-    setSelectedDate((prev) => addDays(prev, -1));
-  }, []);
-
-  const handleNext = useCallback(() => {
-    setSelectedDate((prev) => {
-      const next = addDays(prev, 1);
-      return isAfterDay(next, today) ? prev : next;
-    });
-  }, [today]);
-
-  const canGoNext = !isAfterDay(addDays(selectedDate, 1), today);
-
-  // ── Calendar ────────────────────────────────────────────
-  const handleOpenCalendar = useCallback(() => {
-    router.push({
-      pathname: "/calendar",
-      params: { initialDate: dayKeyFromDate(selectedDate) },
-    });
-  }, [selectedDate]);
-
-  const header = (
+  return (
     <View style={styles.headerRow}>
       <View style={styles.headerSpacer} />
       <Text
@@ -87,50 +78,114 @@ export default function HistoryScreen() {
       />
     </View>
   );
+}
+
+// -------------------------------------------------------------
+// Date section
+//
+// Subscribes to selectedHistoryDayMs only.
+// -------------------------------------------------------------
+
+function HistoryDateSection() {
+  const selectedDayMs = useUIStore(selectSelectedHistoryDayMs);
+  const setSelectedDayMs = useUIStore((s) => s.setSelectedHistoryDayMs);
+
+  const selectedDate = new Date(selectedDayMs);
+  const today = startOfDay(new Date());
+
+  const handlePrev = () => {
+    const prev = addDays(selectedDate, -1);
+    setSelectedDayMs(prev.getTime());
+  };
+
+  const handleNext = () => {
+    const next = addDays(selectedDate, 1);
+    if (isAfterDay(next, today)) return;
+    setSelectedDayMs(next.getTime());
+  };
+
+  const canGoNext = !isAfterDay(addDays(selectedDate, 1), today);
 
   return (
-    <ScrollScreen header={header} testID="history-screen">
-      <DateNavigator
-        date={selectedDate}
-        onPrev={handlePrev}
-        onNext={handleNext}
-        canGoNext={canGoNext}
-        testID="history-date-nav"
-      />
-
-      {logs.length === 0 ? (
-        <FadeInView>
-          <View style={styles.emptyState} testID="history-empty-state">
-            <Text variant="subhead" color="mutedText" textAlign="center">
-              No water logged for this day.
-            </Text>
-          </View>
-        </FadeInView>
-      ) : (
-        <FadeInView key={selectedDate.toISOString()}>
-          <View style={styles.listCard} testID="history-log-list">
-            {logs.map((log) => (
-              <HistoryLogRow
-                key={log.id}
-                amountMl={log.amountMl}
-                loggedAt={log.loggedAt}
-                testID={`history-log-${log.id}`}
-              />
-            ))}
-          </View>
-        </FadeInView>
-      )}
-
-      <FadeInView delay={80}>
-        <DailyTotalCard
-          totalMl={totalMl}
-          goalMl={goalMl}
-          testID="history-daily-total"
-        />
-      </FadeInView>
-    </ScrollScreen>
+    <DateNavigator
+      date={selectedDate}
+      onPrev={handlePrev}
+      onNext={handleNext}
+      canGoNext={canGoNext}
+      testID="history-date-nav"
+    />
   );
 }
+
+// -------------------------------------------------------------
+// Log section
+//
+// Subscribes to selectedHistoryDayMs. Its logs come from a hook
+// that bails out of state updates when content is unchanged, so
+// focus refetches with identical data are free.
+// -------------------------------------------------------------
+
+function HistoryLogSection() {
+  const selectedDayMs = useUIStore(selectSelectedHistoryDayMs);
+  const logs = useDailyLogs(selectedDayMs);
+
+  if (logs.length === 0) {
+    return (
+      <FadeInView>
+        <View style={styles.emptyState} testID="history-empty-state">
+          <Text variant="subhead" color="mutedText" textAlign="center">
+            No water logged for this day.
+          </Text>
+        </View>
+      </FadeInView>
+    );
+  }
+
+  return (
+    <FadeInView key={selectedDayMs}>
+      <View style={styles.listCard} testID="history-log-list">
+        {logs.map((log) => (
+          <HistoryLogRow
+            key={log.id}
+            amountMl={log.amountMl}
+            loggedAt={log.loggedAt}
+            testID={`history-log-${log.id}`}
+          />
+        ))}
+      </View>
+    </FadeInView>
+  );
+}
+
+// -------------------------------------------------------------
+// Total section
+//
+// Subscribes to selectedHistoryDayMs. The summary hook bails out
+// when content is unchanged, so the ring does not restart its
+// animation on a no-op refetch.
+// -------------------------------------------------------------
+
+function HistoryTotalSection() {
+  const selectedDayMs = useUIStore(selectSelectedHistoryDayMs);
+  const summary = useDailySummary(selectedDayMs);
+
+  const totalMl = summary?.totalMl ?? 0;
+  const goalMl = summary?.goalMl ?? DEFAULT_GOAL_ML;
+
+  return (
+    <FadeInView delay={80}>
+      <DailyTotalCard
+        totalMl={totalMl}
+        goalMl={goalMl}
+        testID="history-daily-total"
+      />
+    </FadeInView>
+  );
+}
+
+// -------------------------------------------------------------
+// Styles
+// -------------------------------------------------------------
 
 const styles = StyleSheet.create((theme) => ({
   headerRow: {

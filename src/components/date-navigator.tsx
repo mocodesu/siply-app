@@ -1,33 +1,20 @@
-// ─────────────────────────────────────────────────────────────
 // components/date-navigator.tsx
 //
-// Prev/next day control with a long-form date label. Used on the
-// History screen.
-//
-// The next button disables when the user reaches today. Future
-// dates aren't hidden — they're just unreachable, which is the
-// honest UX for a "past logs" view.
-// ─────────────────────────────────────────────────────────────
+// Prev/next day control with a long-form date label. Next is
+// disabled at today.
 import { HapticPressable } from "@/components/Haptic-pressable";
 import Text from "@/components/text";
 import { SurfaceIcon } from "@/components/themed";
 import { formatDateLong } from "@/utils/date";
 import React from "react";
-import { View, type ViewStyle } from "react-native";
+import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
 export interface DateNavigatorProps {
-  /** Currently selected date. */
   date: Date;
-  /** Fires when the user taps the previous-day chevron. */
   onPrev: () => void;
-  /** Fires when the user taps the next-day chevron. */
   onNext: () => void;
-  /** When false, the next-day chevron is dimmed and inert. */
   canGoNext: boolean;
-  /** Container style override. */
-  style?: ViewStyle;
-  /** Test identifier forwarded to the outer View. */
   testID?: string;
 }
 
@@ -36,11 +23,10 @@ export function DateNavigator({
   onPrev,
   onNext,
   canGoNext,
-  style,
   testID,
 }: DateNavigatorProps) {
   return (
-    <View testID={testID} style={[styles.row, style]}>
+    <View testID={testID} style={styles.row}>
       <HapticPressable
         onPress={onPrev}
         accessibilityLabel="Previous day"
@@ -67,7 +53,7 @@ export function DateNavigator({
         accessibilityLabel="Next day"
         accessibilityState={{ disabled: !canGoNext }}
         hitSlop={8}
-        style={[styles.button, !canGoNext && styles.buttonDisabled]}
+        style={canGoNext ? styles.button : styles.buttonDisabled}
         testID={testID ? `${testID}-next` : undefined}
       >
         <SurfaceIcon name="chevron-forward" size={20} />
@@ -91,6 +77,11 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.radii.full,
   },
   buttonDisabled: {
+    width: theme.layout.minTouchTarget,
+    height: theme.layout.minTouchTarget,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radii.full,
     opacity: theme.opacity.disabled,
   },
   label: {

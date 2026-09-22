@@ -1,11 +1,13 @@
-// ─────────────────────────────────────────────────────────────
 // components/history-log-row.tsx
 //
-// Unit-aware — the amount renders in the user's chosen unit.
-// ─────────────────────────────────────────────────────────────
-import { CupIcon } from "@/components/cup-icon";
+// One logged entry: cup icon, amount, time.
+//
+// The cup is a plain View rather than a Skia canvas. A Skia canvas
+// per list row is a real scroll-jank risk -- each one runs its own
+// render thread work. A rounded rect with a filled bottom strip
+// reads the same at this size and costs nothing.
 import Text from "@/components/text";
-import { useSettingsStore } from "@/store/settings-store";
+import { selectUnits, useSettingsStore } from "@/store/settings-store";
 import { formatTime, formatVolume } from "@/utils/format";
 import React from "react";
 import { View } from "react-native";
@@ -24,10 +26,11 @@ export function HistoryLogRow({
   loggedAt,
   testID,
 }: HistoryLogRowProps) {
-  const units = useSettingsStore((s) => s.units);
+  const units = useSettingsStore(selectUnits);
   const time = formatTime(new Date(loggedAt));
   const fillRatio = Math.min(1, amountMl / CUP_FILL_REFERENCE_ML);
   const display = formatVolume(amountMl, units);
+  const fillHeight = `${Math.round(fillRatio * 100)}%`;
 
   return (
     <View
@@ -36,7 +39,9 @@ export function HistoryLogRow({
       accessible
       accessibilityLabel={`${display} logged at ${time}`}
     >
-      <CupIcon size={20} fillRatio={fillRatio} />
+      <View style={styles.cup}>
+        <View style={[styles.cupFill, { height: fillHeight }]} />
+      </View>
 
       <Text variant="subheadBold" color="onSurface">
         {display}
@@ -59,5 +64,21 @@ const styles = StyleSheet.create((theme) => ({
     minHeight: theme.layout.minTouchTarget,
     paddingVertical: theme.spacing.sm,
   },
-  spacer: { flex: 1 },
+  cup: {
+    width: 16,
+    height: 22,
+    borderRadius: 3,
+    borderWidth: 1.5,
+    borderColor: theme.colors.primary,
+    justifyContent: "flex-end",
+    overflow: "hidden",
+  },
+  cupFill: {
+    width: "100%",
+    backgroundColor: theme.colors.primary,
+    opacity: 0.35,
+  },
+  spacer: {
+    flex: 1,
+  },
 }));

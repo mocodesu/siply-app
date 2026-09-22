@@ -1,26 +1,53 @@
-// ─────────────────────────────────────────────────────────────
 // store/ui-store.ts
 //
-// Tiny coordination store for data that has to flow *backwards*
-// through navigation — a modal that needs to hand a value back to
-// the screen that opened it.
+// Cross-screen UI coordination state.
 //
-// expo-router doesn't have a supported "return value" mechanism,
-// and threading a value through navigation params only works in
-// the forward direction. A store is the least-fragile option.
-//
-// Each slot is consumed and cleared by the reader, so a stale
-// value from a previous visit never leaks into a future one.
-// ─────────────────────────────────────────────────────────────
+// The selected History day lives here rather than in History's
+// component state, so the header, date navigator, log list, and
+// total card can each subscribe to it independently. Selecting a
+// date re-renders only the sections that actually display it.
 import { create } from "zustand";
 
+// -------------------------------------------------------------
+// Types
+// -------------------------------------------------------------
+
 interface UIStore {
-  /** Date chosen in the calendar picker, pending consumption by History. */
-  pendingHistoryDate: Date | null;
-  setPendingHistoryDate: (date: Date | null) => void;
+  /** Selected History day, stored as a start-of-day timestamp. */
+  selectedHistoryDayMs: number;
+  setSelectedHistoryDayMs: (ms: number) => void;
 }
 
+// -------------------------------------------------------------
+// Helpers
+// -------------------------------------------------------------
+
+/** Start-of-day timestamp for the local timezone. */
+export function startOfTodayMs(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** Start-of-day timestamp for an arbitrary date. */
+export function startOfDayMs(date: Date): number {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+// -------------------------------------------------------------
+// Store
+// -------------------------------------------------------------
+
 export const useUIStore = create<UIStore>((set) => ({
-  pendingHistoryDate: null,
-  setPendingHistoryDate: (date) => set({ pendingHistoryDate: date }),
+  selectedHistoryDayMs: startOfTodayMs(),
+  setSelectedHistoryDayMs: (ms) => set({ selectedHistoryDayMs: ms }),
 }));
+
+// -------------------------------------------------------------
+// Atomic selectors
+// -------------------------------------------------------------
+
+export const selectSelectedHistoryDayMs = (s: UIStore): number =>
+  s.selectedHistoryDayMs;

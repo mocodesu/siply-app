@@ -1,33 +1,42 @@
-// ─────────────────────────────────────────────────────────────
 // hooks/use-next-reminder.ts
 //
-// Derives the next scheduled reminder for today from the reminders
-// store. Returns null when Smart Reminders is off, when there are
-// no enabled reminders, or when every enabled reminder has already
-// fired today.
+// Two hooks that share a single pure computation:
 //
-// Recomputes once per minute so the label stays fresh while the
-// Home screen is open — enough resolution for a "in 45 min" label
-// without burning cycles every second.
-// ─────────────────────────────────────────────────────────────
-import { useRemindersStore } from "@/store/reminders-store";
+//   useNextReminder       -- full details, ticks every minute so
+//                            the countdown stays fresh
+//   useIsReminderImminent -- boolean only, uses setState bailout
+//                            so callers re-render only when the
+//                            value flips, not every tick
+//
+// The ticker is skipped entirely when there are no enabled
+// reminders, so the interval cost is zero in the common case.
+import type { Reminder } from "@/repositories/reminder-repo";
+import {
+  selectReminders,
+  selectSmartEnabled,
+  useRemindersStore,
+} from "@/store/reminders-store";
 import { formatTime } from "@/utils/format";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-interface NextReminder {
-  /** Formatted time of the next reminder, e.g. "10:30 AM". */
+const TICK_INTERVAL_MS = 60_000;
+const IMMINENT_WINDOW_MS = 60 * 60 * 1000;
+
+export interface NextReminder {
+  id: string;
   time: string;
-  /** Human-friendly countdown, e.g. "in 45 min" or "in 2 h". */
   timeLeft: string;
-  /** Epoch millis when the reminder fires. */
   firesAt: number;
 }
 
-/** Formats the gap between now and a future timestamp. */
+// -------------------------------------------------------------
+// Pure computation
+// -------------------------------------------------------------
+
 function formatCountdown(msUntil: number): string {
   if (msUntil <= 0) return "now";
 
-  const minutes = Math.round(msUntil / 60000);
+  const minutes = Math.round(msUntil / 60_000);
   if (minutes < 60) return `in ${minutes} min`;
 
   const hours = Math.floor(minutes / 60);
@@ -36,40 +45,84 @@ function formatCountdown(msUntil: number): string {
   return `in ${hours} h ${remainder} min`;
 }
 
+function computeNextReminder(
+  reminders: readonly Reminder[],
+  smartEnabled: boolean,
+  nowMs: number,
+): NextReminder | null {
+  if (!smartEnabled) return null;
+
+  const today = new Date(nowMs);
+
+  for (const reminder of reminders) {
+    if (!reminder.enabled) continue;
+
+    const fireDate = new Date(today);
+    fireDate.setHours(reminder.hour, reminder.minute, 0, 0);
+    const firesAt = fireDate.getTime();
+    if (firesAt <= nowMs) continue;
+
+    return {
+      id: reminder.id,
+      time: formatTime(fireDate),
+      timeLeft: formatCountdown(firesAt - nowMs),
+      firesAt,
+    };
+  }
+
+  return null;
+}
+
+// -------------------------------------------------------------
+// Full-detail hook
+// -------------------------------------------------------------
+
 export function useNextReminder(): NextReminder | null {
-  const reminders = useRemindersStore((s) => s.reminders);
-  const smartEnabled = useRemindersStore((s) => s.smartEnabled);
+  const reminders = useRemindersStore(selectReminders);
+  const smartEnabled = useRemindersStore(selectSmartEnabled);
 
-  // Tick once a minute so countdowns stay fresh.
   const [now, setNow] = useState(() => Date.now());
+
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 60_000);
+    if (!smartEnabled || reminders.length === 0) return;
+
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), TICK_INTERVAL_MS);
     return () => clearInterval(id);
-  }, []);
+  }, [reminders, smartEnabled]);
 
-  return useMemo(() => {
-    if (!smartEnabled) return null;
+  return computeNextReminder(reminders, smartEnabled, now);
+}
 
-    const enabled = reminders.filter((r) => r.enabled);
-    if (enabled.length === 0) return null;
+// -------------------------------------------------------------
+// Boolean-only hook
+// -------------------------------------------------------------
 
-    const today = new Date(now);
+export function useIsReminderImminent(): boolean {
+  const reminders = useRemindersStore(selectReminders);
+  const smartEnabled = useRemindersStore(selectSmartEnabled);
 
-    // Build today's occurrences and pick the next one.
-    for (const reminder of enabled) {
-      const fireDate = new Date(today);
-      fireDate.setHours(reminder.hour, reminder.minute, 0, 0);
+  const [imminent, setImminent] = useState(false);
 
-      const firesAt = fireDate.getTime();
-      if (firesAt > now) {
-        return {
-          time: formatTime(fireDate),
-          timeLeft: formatCountdown(firesAt - now),
-          firesAt,
-        };
-      }
+  useEffect(() => {
+    if (!smartEnabled || reminders.length === 0) {
+      setImminent(false);
+      return;
     }
 
-    return null;
-  }, [reminders, smartEnabled, now]);
+    const check = () => {
+      const nowMs = Date.now();
+      const next = computeNextReminder(reminders, smartEnabled, nowMs);
+      const value = next !== null && next.firesAt - nowMs < IMMINENT_WINDOW_MS;
+      // setState bails out when the value is identical, so callers
+      // re-render only when the dot needs to appear or disappear.
+      setImminent(value);
+    };
+
+    check();
+    const id = setInterval(check, TICK_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [reminders, smartEnabled]);
+
+  return imminent;
 }

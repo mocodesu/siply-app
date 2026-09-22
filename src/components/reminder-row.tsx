@@ -1,21 +1,24 @@
-// ─────────────────────────────────────────────────────────────
 // components/reminder-row.tsx
 //
-// One reminder: bell icon, time, cadence, status indicator, and a
-// Switch. Swipe left to reveal a destructive Delete action.
+// One reminder row. Subscribes to its own reminder data, its own
+// status, and its own busy flag -- never to shared state that
+// changes when a sibling toggles.
 //
-// Uses `ReanimatedSwipeable` — the Reanimated 4 implementation.
-// The legacy `Swipeable` from the package root is deprecated and
-// runs its gesture on the JS thread.
-//   See: docs.swmansion.com/react-native-gesture-handler/docs/components/reanimated_swipeable
-// ─────────────────────────────────────────────────────────────
+// Why this matters: an earlier version accepted a `swipeDisabled`
+// prop derived from a shared `busy` boolean. Toggling any row
+// flipped that boolean, so every row re-rendered, and the native
+// Switch on Android re-animated on each re-render even when its
+// value was unchanged. Own-state subscriptions prevent that.
 import { HapticPressable } from "@/components/Haptic-pressable";
 import Text from "@/components/text";
 import { MutedIcon } from "@/components/themed";
 import { ToggleRow } from "@/components/toggle-row";
-import type { ReminderStatus } from "@/hooks/use-reminder-actions";
-import type { Reminder } from "@/repositories/reminder-repo";
-import React, { useCallback, useRef } from "react";
+import {
+  useReminderStatus,
+  useRemindersStore,
+  type ReminderStatus,
+} from "@/store/reminders-store";
+import React, { useRef } from "react";
 import { View } from "react-native";
 import ReanimatedSwipeable, {
   type SwipeableMethods,
@@ -26,14 +29,12 @@ import Animated, {
 } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 // Constants
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 
-/** Width of the revealed delete action. */
 const DELETE_WIDTH = 84;
 
-/** Human-readable label per status. */
 const STATUS_LABEL: Record<ReminderStatus, string> = {
   scheduled: "Scheduled",
   blocked: "Notifications blocked",
@@ -41,9 +42,9 @@ const STATUS_LABEL: Record<ReminderStatus, string> = {
   pending: "Saving…",
 };
 
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 // Delete action
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 
 interface DeleteActionProps {
   drag: SharedValue<number>;
@@ -74,53 +75,65 @@ function DeleteAction({ drag, onPress, testID }: DeleteActionProps) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Component
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
+// Row
+// -------------------------------------------------------------
 
 export interface ReminderRowProps {
-  reminder: Reminder;
-  status: ReminderStatus;
+  reminderId: string;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
-  /** When true, the switch and swipe are inert. */
+  /** True when Smart Reminders is off. Stable per toggle. */
   disabled?: boolean;
-  /** When true, swiping is disabled entirely (e.g. while saving). */
-  swipeDisabled?: boolean;
   testID?: string;
 }
 
 export function ReminderRow({
-  reminder,
-  status,
+  reminderId,
   onToggle,
   onDelete,
   disabled = false,
-  swipeDisabled = false,
   testID,
 }: ReminderRowProps) {
+  // Subscribe to this reminder's own data. The store's optimistic
+  // update replaces only the changed item, so unmodified items
+  // retain reference equality and this selector bails.
+  const reminder = useRemindersStore((s) =>
+    s.reminders.find((r) => r.id === reminderId),
+  );
+
+  // Per-row status. Returns a primitive string. Sibling toggles
+  // don't change our value, so Zustand bails.
+  const status = useReminderStatus(reminderId);
+
+  // Per-row busy flag. Returns a primitive boolean. Only flips
+  // when THIS row starts or finishes processing.
+  const isBusy = useRemindersStore((s) => s.busyIds[reminderId] === true);
+
   const swipeRef = useRef<SwipeableMethods>(null);
 
-  const handleDelete = useCallback(() => {
-    // Close the swipe before removing so the row doesn't animate
-    // out while still translated.
+  // Bail for one frame during removal.
+  if (!reminder) return null;
+
+  const handleDelete = () => {
     swipeRef.current?.close();
     onDelete(reminder.id);
-  }, [onDelete, reminder.id]);
+  };
 
-  const renderRightActions = useCallback(
-    (_progress: SharedValue<number>, drag: SharedValue<number>) => (
-      <DeleteAction
-        drag={drag}
-        onPress={handleDelete}
-        testID={testID ? `${testID}-delete` : undefined}
-      />
-    ),
-    [handleDelete, testID],
+  const renderRightActions = (
+    _progress: SharedValue<number>,
+    drag: SharedValue<number>,
+  ) => (
+    <DeleteAction
+      drag={drag}
+      onPress={handleDelete}
+      testID={testID ? `${testID}-delete` : undefined}
+    />
   );
 
   const subtitle = STATUS_LABEL[status];
   const isBlocked = status === "blocked";
+  const swipeEnabled = !isBusy && !disabled;
 
   return (
     <ReanimatedSwipeable
@@ -128,7 +141,7 @@ export function ReminderRow({
       friction={2}
       rightThreshold={DELETE_WIDTH * 0.5}
       overshootRight={false}
-      enabled={!swipeDisabled && !disabled}
+      enabled={swipeEnabled}
       renderRightActions={renderRightActions}
       containerStyle={styles.swipeContainer}
     >
@@ -151,7 +164,7 @@ export function ReminderRow({
           subtitle={subtitle}
           value={reminder.enabled}
           onValueChange={() => onToggle(reminder.id)}
-          disabled={disabled || status === "pending"}
+          disabled={disabled || isBusy}
           style={styles.toggle}
           testID={testID ? `${testID}-toggle` : undefined}
           switchTestID={testID ? `${testID}-switch` : undefined}
@@ -161,9 +174,9 @@ export function ReminderRow({
   );
 }
 
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 // Styles
-// ─────────────────────────────────────────────────────────────
+// -------------------------------------------------------------
 
 const styles = StyleSheet.create((theme) => ({
   swipeContainer: {
