@@ -4,6 +4,7 @@ import {
   type AppColorSchemeId,
 } from "@/theme/color-schemes";
 import {
+  buildSemanticColors,
   COLOR_MODE_STORAGE_KEY,
   COLOR_SCHEME_STORAGE_KEY,
   createDarkColors,
@@ -59,6 +60,10 @@ function readStoredMode(): ThemeMode {
 /**
  * Applies the scheme colors + mode to Unistyles globally. Pure
  * side-effect — no React state involved.
+ *
+ * Because `semantic` is derived from `colors`, it must be rebuilt
+ * whenever the palette changes. Component tokens are palette-agnostic
+ * and stay untouched.
  */
 function applyTheme(schemeId: AppColorSchemeId, mode: ThemeMode) {
   const light = createLightColors(schemeId);
@@ -67,11 +72,13 @@ function applyTheme(schemeId: AppColorSchemeId, mode: ThemeMode) {
   UnistylesRuntime.updateTheme("light", (theme) => ({
     ...theme,
     colors: light,
+    semantic: buildSemanticColors(light),
     isDark: false,
   }));
   UnistylesRuntime.updateTheme("dark", (theme) => ({
     ...theme,
     colors: dark,
+    semantic: buildSemanticColors(dark),
     isDark: true,
   }));
 

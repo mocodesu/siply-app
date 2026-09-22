@@ -18,8 +18,6 @@ export const BASE_GAP = 4;
 //  COLOR SCHEME RESOLUTION
 // ═══════════════════════════════════════════════════════════
 
-// MMKV keys. Single source of truth for theme persistence —
-// ThemePreferenceProvider reads and writes these exact keys.
 export const COLOR_SCHEME_STORAGE_KEY = "app-color-scheme";
 export const COLOR_MODE_STORAGE_KEY = "app-color-mode";
 
@@ -27,20 +25,48 @@ const resolveColorScheme = (schemeId: AppColorSchemeId = DEFAULT_SCHEME_ID) =>
   APP_COLOR_SCHEMES.find((scheme) => scheme.id === schemeId) ??
   APP_COLOR_SCHEMES.find((scheme) => scheme.id === DEFAULT_SCHEME_ID)!;
 
+/**
+ * Widened palette shape. `APP_COLOR_SCHEMES` is declared `as const`,
+ * so every color value is inferred as a string literal (e.g.
+ * `"#2563EB"`). Widening to `string` here lets light and dark
+ * palettes from any scheme be assigned to the same variable — which
+ * is what `buildTheme` and `buildSemanticColors` need.
+ */
+export type ColorPalette = {
+  primary: string;
+  primaryIllumination: string;
+  secondary: string;
+  onPrimary: string;
+  onSecondary: string;
+  tertiary: string;
+  background: string;
+  onBackground: string;
+  surface: string;
+  onSurface: string;
+  panel: string;
+  panelBorder: string;
+  mutedText: string;
+  active: string;
+  activeSurface: string;
+  activeField: string;
+  inactive: string;
+  inactiveSurface: string;
+  danger: string;
+  dangerIllumination: string;
+  darkKey: string;
+  darkKeyIllumination: string;
+};
+
 export const createLightColors = (
   schemeId: AppColorSchemeId = DEFAULT_SCHEME_ID,
-) => resolveColorScheme(schemeId).tokens.light;
+): ColorPalette => resolveColorScheme(schemeId).tokens.light;
 
 export const createDarkColors = (
   schemeId: AppColorSchemeId = DEFAULT_SCHEME_ID,
-) => resolveColorScheme(schemeId).tokens.dark;
+): ColorPalette => resolveColorScheme(schemeId).tokens.dark;
 
-// Initial seed for StyleSheet.configure. The ThemePreferenceProvider
-// overrides these synchronously on mount via useLayoutEffect, so this
-// is only ever visible for the very first frame before the provider's
-// useState initializer reads MMKV.
-export const Colors = createLightColors(DEFAULT_SCHEME_ID);
-export const DarkColors = createDarkColors(DEFAULT_SCHEME_ID);
+export const Colors: ColorPalette = createLightColors(DEFAULT_SCHEME_ID);
+export const DarkColors: ColorPalette = createDarkColors(DEFAULT_SCHEME_ID);
 
 // ═══════════════════════════════════════════════════════════
 //  PRIMITIVE TOKENS
@@ -112,8 +138,6 @@ export const ICON = {
 } as const;
 
 // ── TYPOGRAPHY ─────────────────────────────────────────────
-const SYSTEM = undefined as string | undefined; // SF Pro (iOS) / Roboto (Android)
-
 export const TYPE = {
   display: {
     fontFamily: FONT_FAMILY.extraBold,
@@ -255,19 +279,245 @@ export const ELEVATION = {
 
 // ── LAYOUT ─────────────────────────────────────────────────
 export const LAYOUT = {
-  screenPaddingH: SPACE.lg, // 15
-  screenPaddingV: SPACE.md, // 10
-  cardPadding: SPACE.md, // 10
-  sectionGap: SPACE.xl, // 20
-  listGap: SPACE.md, // 10
-  /** Single-column content max width on a phone. */
+  screenPaddingH: SPACE.lg,
+  screenPaddingV: SPACE.md,
+  cardPadding: SPACE.md,
+  sectionGap: SPACE.xl,
+  listGap: SPACE.md,
   contentMaxWidth: 640,
-  /** Single-column content max width on a tablet. */
   contentMaxWidthTablet: 760,
-  /** Wide content max width on a tablet, for two-column layouts. */
   contentMaxWidthWide: 1200,
-  hitSlop: SPACE.sm, // 7.5
-  minTouchTarget: 44, // iOS HIG
+  hitSlop: SPACE.sm,
+  minTouchTarget: 44,
+} as const;
+
+// ═══════════════════════════════════════════════════════════
+//  SEMANTIC COLOR ROLES (hydration domain)
+// ═══════════════════════════════════════════════════════════
+//
+// These roles are resolved per-scheme in `buildSemanticColors`.
+// Every role maps to an existing palette token, so all six colour
+// schemes work without new base colours.
+
+type SemanticColorRoles = {
+  // ── Hydration progress ────────────────────────────────
+  /** Arc + fill for the daily progress ring. */
+  progressRing: string;
+  /** Unfilled track behind the progress ring. */
+  progressRingTrack: string;
+  /** Water fill inside the animated glass / drop. */
+  waterFill: string;
+  /** Water surface highlight (lighter wave crest). */
+  waterSurfaceHighlight: string;
+  /** Water body shadow (darker wave trough). */
+  waterBodyShadow: string;
+
+  // ── Goal states ───────────────────────────────────────
+  /** Goal reached / above target. */
+  goalMet: string;
+  /** Soft background behind a met-goal badge. */
+  goalMetSurface: string;
+  /** Slightly under target. */
+  goalNear: string;
+  /** Soft background behind a near-goal badge. */
+  goalNearSurface: string;
+  /** Well under target. */
+  goalLow: string;
+  /** Soft background behind a low-goal badge. */
+  goalLowSurface: string;
+
+  // ── Charts ────────────────────────────────────────────
+  /** Default bar in a bar chart. */
+  chartBar: string;
+  /** Highlighted bar (e.g. today, best day). */
+  chartBarHighlight: string;
+  /** Muted bar for days with no data. */
+  chartBarMuted: string;
+  /** Horizontal grid lines behind charts. */
+  chartGridLine: string;
+  /** Axis labels. */
+  chartAxisLabel: string;
+
+  // ── Quick-add / action surfaces ───────────────────────
+  /** Background of the floating quick-add FAB. */
+  quickAddBackground: string;
+  /** Icon colour inside the quick-add FAB. */
+  quickAddIcon: string;
+
+  // ── Reminder card ─────────────────────────────────────
+  /** Background of the next-reminder card on Home. */
+  reminderCardBackground: string;
+  /** Border of the next-reminder card. */
+  reminderCardBorder: string;
+  /** Icon tint inside the reminder card. */
+  reminderIcon: string;
+
+  // ── Badges / achievements ─────────────────────────────
+  /** Locked badge background. */
+  badgeLocked: string;
+  /** Locked badge border. */
+  badgeLockedBorder: string;
+  /** Unlocked badge background. */
+  badgeUnlocked: string;
+  /** Unlocked badge border. */
+  badgeUnlockedBorder: string;
+
+  // ── Premium ───────────────────────────────────────────
+  /** Premium hero gradient start. */
+  premiumGradientStart: string;
+  /** Premium hero gradient end. */
+  premiumGradientEnd: string;
+  /** Premium CTA background. */
+  premiumCtaBackground: string;
+  /** Premium CTA label. */
+  premiumCtaLabel: string;
+};
+
+/**
+ * Builds the semantic colour roles for a given palette. Called once
+ * per light/dark theme at module load and again on scheme change.
+ */
+export const buildSemanticColors = (palette: {
+  primary: string;
+  primaryIllumination: string;
+  active: string;
+  activeSurface: string;
+  inactive: string;
+  inactiveSurface: string;
+  danger: string;
+  dangerIllumination: string;
+  background: string;
+  surface: string;
+  onSurface: string;
+  panel: string;
+  panelBorder: string;
+  mutedText: string;
+  onPrimary: string;
+  tertiary: string;
+  darkKey: string;
+  darkKeyIllumination: string;
+}): SemanticColorRoles => ({
+  // ── Hydration progress ────────────────────────────────
+  progressRing: palette.primary,
+  progressRingTrack: palette.panel,
+  waterFill: palette.primary,
+  waterSurfaceHighlight: palette.primaryIllumination,
+  waterBodyShadow: palette.darkKeyIllumination,
+
+  // ── Goal states ───────────────────────────────────────
+  goalMet: palette.active,
+  goalMetSurface: palette.activeSurface,
+  goalNear: palette.inactive,
+  goalNearSurface: palette.inactiveSurface,
+  goalLow: palette.danger,
+  goalLowSurface: palette.dangerIllumination,
+
+  // ── Charts ────────────────────────────────────────────
+  chartBar: palette.primary,
+  chartBarHighlight: palette.primaryIllumination,
+  chartBarMuted: palette.panelBorder,
+  chartGridLine: palette.panelBorder,
+  chartAxisLabel: palette.mutedText,
+
+  // ── Quick-add / action surfaces ───────────────────────
+  quickAddBackground: palette.primary,
+  quickAddIcon: palette.onPrimary,
+
+  // ── Reminder card ─────────────────────────────────────
+  reminderCardBackground: palette.panel,
+  reminderCardBorder: palette.panelBorder,
+  reminderIcon: palette.primary,
+
+  // ── Badges / achievements ─────────────────────────────
+  badgeLocked: palette.panel,
+  badgeLockedBorder: palette.panelBorder,
+  badgeUnlocked: palette.activeSurface,
+  badgeUnlockedBorder: palette.active,
+
+  // ── Premium ───────────────────────────────────────────
+  premiumGradientStart: palette.primary,
+  premiumGradientEnd: palette.tertiary,
+  premiumCtaBackground: palette.primary,
+  premiumCtaLabel: palette.onPrimary,
+});
+
+// ═══════════════════════════════════════════════════════════
+//  COMPONENT TOKENS (hydration domain)
+// ═══════════════════════════════════════════════════════════
+//
+// Component tokens describe a specific UI treatment in one place.
+// Screens reference `theme.components.cupCard` instead of repeating
+// radius, padding, and border values.
+
+const components = {
+  // ── Cup-size card (Add Water, Daily Goal) ─────────────
+  cupCard: {
+    paddingVertical: SPACE.lg,
+    paddingHorizontal: SPACE.md,
+    borderRadius: RADII.lg,
+    borderWidth: BORDER.thin,
+    iconSize: ICON.xxl,
+    gap: SPACE.xs,
+  },
+
+  // ── Stat card (Home, Weekly Summary, History) ─────────
+  statCard: {
+    padding: SPACE.md,
+    borderRadius: RADII.md,
+    borderWidth: BORDER.thin,
+    gap: SPACE.xxs,
+    iconSize: ICON.md,
+  },
+
+  // ── Setting row (Settings, Reminders) ─────────────────
+  settingRow: {
+    minHeight: LAYOUT.minTouchTarget,
+    paddingVertical: SPACE.md,
+    paddingHorizontal: SPACE.md,
+    gap: SPACE.md,
+    chevronSize: ICON.sm,
+  },
+
+  // ── Badge row (Achievements) ──────────────────────────
+  badgeRow: {
+    padding: SPACE.md,
+    borderRadius: RADII.md,
+    borderWidth: BORDER.thin,
+    gap: SPACE.md,
+    iconSize: ICON.xl,
+  },
+
+  // ── Segmented control (Weekly Summary, Statistics) ────
+  segmentedControl: {
+    padding: BASE_GAP * 0.75,
+    borderRadius: RADII.md,
+    segmentPaddingVertical: SPACE.xs,
+    segmentPaddingHorizontal: SPACE.md,
+  },
+
+  // ── Primary CTA button ────────────────────────────────
+  primaryButton: {
+    paddingVertical: SPACE.md,
+    paddingHorizontal: SPACE.lg,
+    borderRadius: RADII.md,
+    minHeight: LAYOUT.minTouchTarget,
+    iconSize: ICON.md,
+  },
+
+  // ── Circular progress ring ────────────────────────────
+  progressRing: {
+    defaultSize: 200,
+    strokeWidth: 14,
+    trackStrokeWidth: 14,
+  },
+
+  // ── Bar chart ─────────────────────────────────────────
+  barChart: {
+    defaultHeight: 160,
+    barRadius: RADII.sm,
+    barGap: SPACE.sm,
+    axisHeight: 24,
+  },
 } as const;
 
 // ═══════════════════════════════════════════════════════════
@@ -277,12 +527,8 @@ const commonTokens = {
   gap: (v: number) => v * BASE_GAP,
   paddingHorizontal: LAYOUT.screenPaddingH,
 
-  spacing: {
-    ...SPACE,
-  },
-  radii: {
-    ...RADII,
-  },
+  spacing: { ...SPACE },
+  radii: { ...RADII },
   borderWidth: BORDER,
   opacity: OPACITY,
   duration: DURATION,
@@ -290,14 +536,18 @@ const commonTokens = {
   typography: TYPE,
   elevation: ELEVATION,
   layout: LAYOUT,
+  components,
 } as const;
 
-const lightTheme = { isDark: false, colors: Colors, ...commonTokens } as const;
-const darkTheme = {
-  isDark: true,
-  colors: DarkColors,
+const buildTheme = (colors: typeof Colors, isDark: boolean) => ({
+  isDark,
+  colors,
+  semantic: buildSemanticColors(colors),
   ...commonTokens,
-} as const;
+});
+
+const lightTheme = buildTheme(Colors, false);
+const darkTheme = buildTheme(DarkColors, true);
 
 const appThemes = {
   light: lightTheme,
@@ -334,6 +584,8 @@ StyleSheet.configure({
 // ═══════════════════════════════════════════════════════════
 export type AppTheme = typeof lightTheme;
 export type AppColorTokens = typeof Colors;
+export type AppSemanticTokens = AppTheme["semantic"];
+export type AppComponentTokens = AppTheme["components"];
 export type AppTypographyToken = keyof typeof TYPE;
 export type AppSpaceToken = keyof typeof SPACE;
 export type AppRadiusToken = keyof typeof RADII;
