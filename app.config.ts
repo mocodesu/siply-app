@@ -11,7 +11,7 @@ import {
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-const EAS_PROJECT_ID = "";
+const EAS_PROJECT_ID = "0d93a672-78bc-4769-be2b-975a2158345a";
 const PROJECT_SLUG = "siply";
 const OWNER = "mocodesu";
 
