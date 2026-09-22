@@ -1,11 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 // app/(main)/reminders.tsx
 //
-// Modal for configuring hydration reminders.
-//
-// Layout mirrors reference screen 4: header with back + add,
-// Smart Reminders card, the reminder time list, and the
-// consistency tip.
+// The "+" now opens the add-reminder modal.
 // ─────────────────────────────────────────────────────────────
 import { IconButton } from "@/components/icon-button";
 import { ReminderRow } from "@/components/reminder-row";
@@ -26,15 +22,11 @@ export default function RemindersScreen() {
   const toggleReminder = useRemindersStore((s) => s.toggleReminder);
 
   const handleBack = useCallback(() => {
-    if (router.canGoBack()) {
-      router.back();
-    }
+    if (router.canGoBack()) router.back();
   }, []);
 
   const handleAdd = useCallback(() => {
-    // Time-picker flow lands in a later step. For now this is a
-    // no-op so the header matches the design without implying a
-    // feature that doesn't exist yet.
+    router.push("/add-reminder");
   }, []);
 
   const handleSmartToggle = useCallback(
@@ -70,14 +62,12 @@ export default function RemindersScreen() {
 
   return (
     <ScrollScreen header={header} testID="reminders-screen">
-      {/* ── Title ───────────────────────────────────────── */}
       <View style={styles.titleBlock}>
         <Text variant="h2" color="onBackground" textAlign="center">
           Reminders
         </Text>
       </View>
 
-      {/* ── Smart Reminders ─────────────────────────────── */}
       <View style={styles.card}>
         <ToggleRow
           label="Smart Reminders"
@@ -89,7 +79,6 @@ export default function RemindersScreen() {
         />
       </View>
 
-      {/* ── Reminder times ──────────────────────────────── */}
       <View style={styles.listSection}>
         <Text variant="subheadBold" color="onSurface">
           Reminder Times
@@ -108,7 +97,6 @@ export default function RemindersScreen() {
         </View>
       </View>
 
-      {/* ── Tip ─────────────────────────────────────────── */}
       <TipCard
         title="Tip: Consistency is key!"
         body="Spread your water intake throughout the day."

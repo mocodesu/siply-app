@@ -1,33 +1,23 @@
 // ─────────────────────────────────────────────────────────────
 // components/cup-card.tsx
 //
-// Selectable cup-size card: a glass icon with its fill level and
-// the amount below. Used on Add Water and Daily Goal.
-//
-// Selection state is communicated through border, background, and
-// text color together — never color alone — so it stays legible
-// for color-blind users and in high-contrast mode.
+// Unit-aware — displays the amount in the user's chosen unit.
 // ─────────────────────────────────────────────────────────────
 import { CupIcon } from "@/components/cup-icon";
 import { HapticPressable } from "@/components/Haptic-pressable";
 import Text from "@/components/text";
+import { useSettingsStore } from "@/store/settings-store";
+import { formatVolumeValue } from "@/utils/format";
+import { unitSuffix } from "@/utils/units";
 import React from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
 export interface CupCardProps {
-  /** Amount this cup represents, in millilitres. */
   amountMl: number;
-  /**
-   * Largest available cup size, used to compute the icon's fill
-   * level so the glasses are visually comparable to each other.
-   */
   maxAmountMl: number;
-  /** Whether this card is the current selection. */
   selected: boolean;
-  /** Press handler — typically sets the parent's selected amount. */
   onPress: () => void;
-  /** Test identifier forwarded to the pressable. */
   testID?: string;
 }
 
@@ -38,13 +28,15 @@ export function CupCard({
   onPress,
   testID,
 }: CupCardProps) {
+  const units = useSettingsStore((s) => s.units);
   const fillRatio = maxAmountMl > 0 ? amountMl / maxAmountMl : 0;
+  const displayValue = formatVolumeValue(amountMl, units);
 
   return (
     <HapticPressable
       testID={testID}
       onPress={onPress}
-      accessibilityLabel={`${amountMl} millilitres`}
+      accessibilityLabel={`${displayValue} ${unitSuffix(units)}`}
       accessibilityState={{ selected }}
       style={styles.pressable}
     >
@@ -55,7 +47,7 @@ export function CupCard({
           color={selected ? "primary" : "onSurface"}
           textAlign="center"
         >
-          {amountMl} ml
+          {displayValue} {unitSuffix(units)}
         </Text>
       </View>
     </HapticPressable>
@@ -63,9 +55,7 @@ export function CupCard({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  pressable: {
-    flex: 1,
-  },
+  pressable: { flex: 1 },
   card: {
     paddingVertical: theme.components.cupCard.paddingVertical,
     paddingHorizontal: theme.components.cupCard.paddingHorizontal,

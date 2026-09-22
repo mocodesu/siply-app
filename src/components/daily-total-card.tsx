@@ -1,31 +1,23 @@
 // ─────────────────────────────────────────────────────────────
 // components/daily-total-card.tsx
 //
-// Daily summary tile for the History screen: total on the left,
-// a compact progress ring on the right, goal underneath.
-//
-// The ring is the same `HydrationRing` used on Home, just smaller.
-// Reusing it guarantees the two screens never drift visually.
+// Unit-aware — total and goal render in the user's chosen unit.
 // ─────────────────────────────────────────────────────────────
 import { HydrationRing } from "@/components/hydration-ring";
 import Text from "@/components/text";
-import { formatNumber } from "@/utils/format";
+import { useSettingsStore } from "@/store/settings-store";
+import { formatVolume } from "@/utils/format";
 import React from "react";
 import { View, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
-/** Diameter of the compact ring, in pixels. */
 const RING_SIZE = 76;
 const RING_STROKE = 7;
 
 export interface DailyTotalCardProps {
-  /** Total logged for the day, in millilitres. */
   totalMl: number;
-  /** Goal for the day, in millilitres. */
   goalMl: number;
-  /** Container style override. */
   style?: ViewStyle;
-  /** Test identifier forwarded to the outer View. */
   testID?: string;
 }
 
@@ -35,6 +27,7 @@ export function DailyTotalCard({
   style,
   testID,
 }: DailyTotalCardProps) {
+  const units = useSettingsStore((s) => s.units);
   const percentage = goalMl > 0 ? Math.min(1, totalMl / goalMl) : 0;
 
   return (
@@ -44,14 +37,14 @@ export function DailyTotalCard({
           Daily Total
         </Text>
         <Text variant="h2" color="onSurface">
-          {formatNumber(totalMl)} ml
+          {formatVolume(totalMl, units)}
         </Text>
         <View style={styles.goalRow}>
           <Text variant="caption" color="mutedText">
             Goal
           </Text>
           <Text variant="subheadBold" color="onSurface">
-            {formatNumber(goalMl)} ml
+            {formatVolume(goalMl, units)}
           </Text>
         </View>
       </View>

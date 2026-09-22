@@ -1,13 +1,10 @@
 // ─────────────────────────────────────────────────────────────
 // app/(tabs)/settings.tsx — Settings
 //
-// Layout mirrors reference screen 9: a Preferences group, a
-// Reminders group, and an Integrations group. The existing
-// Appearance and About cards from the starter are preserved at
-// the bottom so the theme picker and legal links stay reachable.
-//
-// Groups are built from SettingsSection + SettingRow, so adding a
-// row is a one-line change and the divider logic stays in one place.
+// Fixes from Step 12:
+//   • Daily Goal row now shows the correct unit
+//   • Default Cup Size, Units, Start Day rows now open pickers
+//   • Integrations toggles marked "Coming soon" and disabled
 // ─────────────────────────────────────────────────────────────
 import { ScrollScreen } from "@/components/screen";
 import { SettingRow } from "@/components/setting-row";
@@ -22,17 +19,14 @@ import {
   type AppColorSchemeId,
 } from "@/theme/color-schemes";
 import { ThemeMode } from "@/types";
-import { formatNumber } from "@/utils/format";
+import { formatVolume } from "@/utils/format";
+import { unitSuffix } from "@/utils/units";
 import { Ionicons } from "@expo/vector-icons";
 import * as Application from "expo-application";
 import { router } from "expo-router";
 import React, { useCallback } from "react";
 import { Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-
-// ─────────────────────────────────────────────────────────────
-// Appearance options
-// ─────────────────────────────────────────────────────────────
 
 const THEME_MODES: {
   key: ThemeMode;
@@ -44,37 +38,23 @@ const THEME_MODES: {
   { key: "dark", label: "Dark", icon: "moon" },
 ];
 
-// ─────────────────────────────────────────────────────────────
-// Screen
-// ─────────────────────────────────────────────────────────────
-
 export default function SettingsScreen() {
   const { theme } = useUnistyles();
 
-  // ── Existing theme preferences ──────────────────────────
   const { schemeId, mode, selectScheme, selectMode } = useThemePreference();
 
-  // ── Hydration goal ──────────────────────────────────────
   const goalMl = useHydrationStore((s) => s.goalMl);
-
-  // ── Reminders ───────────────────────────────────────────
   const smartEnabled = useRemindersStore((s) => s.smartEnabled);
   const setSmartEnabled = useRemindersStore((s) => s.setSmartEnabled);
 
-  // ── App settings ────────────────────────────────────────
   const defaultCupSize = useSettingsStore((s) => s.defaultCupSize);
   const units = useSettingsStore((s) => s.units);
   const startDay = useSettingsStore((s) => s.startDay);
-  const appleHealth = useSettingsStore((s) => s.appleHealth);
-  const googleFit = useSettingsStore((s) => s.googleFit);
-  const setAppleHealth = useSettingsStore((s) => s.setAppleHealth);
-  const setGoogleFit = useSettingsStore((s) => s.setGoogleFit);
 
-  // ── Version info ────────────────────────────────────────
   const appVersion = Application.nativeApplicationVersion ?? "—";
   const buildVersion = Application.nativeBuildVersion ?? "—";
 
-  // ── Navigation handlers ─────────────────────────────────
+  // ── Handlers ────────────────────────────────────────────
   const handleOpenDailyGoal = useCallback(() => {
     router.push("/daily-goal");
   }, []);
@@ -87,6 +67,18 @@ export default function SettingsScreen() {
     router.push("/achievements");
   }, []);
 
+  const handleOpenCupSizePicker = useCallback(() => {
+    router.push({ pathname: "/picker", params: { setting: "cup-size" } });
+  }, []);
+
+  const handleOpenUnitsPicker = useCallback(() => {
+    router.push({ pathname: "/picker", params: { setting: "units" } });
+  }, []);
+
+  const handleOpenStartDayPicker = useCallback(() => {
+    router.push({ pathname: "/picker", params: { setting: "start-day" } });
+  }, []);
+
   const handleSmartToggle = useCallback(
     (value: boolean) => {
       void setSmartEnabled(value);
@@ -94,55 +86,32 @@ export default function SettingsScreen() {
     [setSmartEnabled],
   );
 
-  const handleAppleHealthToggle = useCallback(
-    (value: boolean) => {
-      void setAppleHealth(value);
-    },
-    [setAppleHealth],
-  );
-
-  const handleGoogleFitToggle = useCallback(
-    (value: boolean) => {
-      void setGoogleFit(value);
-    },
-    [setGoogleFit],
-  );
-
-  // ── Unit label for the cup size row ─────────────────────
-  const cupSizeLabel = `${defaultCupSize} ${units}`;
-
   return (
     <ScrollScreen testID="settings-screen">
       {/* ── Preferences ─────────────────────────────────── */}
       <SettingsSection title="Preferences" testID="settings-preferences">
         <SettingRow
           label="Daily Goal"
-          value={`${formatNumber(goalMl)} ${units}`}
+          value={formatVolume(goalMl, units)}
           onPress={handleOpenDailyGoal}
           testID="settings-daily-goal"
         />
         <SettingRow
           label="Default Cup Size"
-          value={cupSizeLabel}
-          onPress={() => {
-            // Cup-size picker modal lands in a later step.
-          }}
+          value={`${defaultCupSize} ${unitSuffix(units)}`}
+          onPress={handleOpenCupSizePicker}
           testID="settings-cup-size"
         />
         <SettingRow
           label="Units"
-          value={units}
-          onPress={() => {
-            // Unit picker modal lands in a later step.
-          }}
+          value={units === "oz" ? "Fluid ounces" : "Millilitres"}
+          onPress={handleOpenUnitsPicker}
           testID="settings-units"
         />
         <SettingRow
           label="Start Day"
           value={startDay === "monday" ? "Monday" : "Sunday"}
-          onPress={() => {
-            // Start-day picker modal lands in a later step.
-          }}
+          onPress={handleOpenStartDayPicker}
           testID="settings-start-day"
         />
         <SettingRow
@@ -172,19 +141,15 @@ export default function SettingsScreen() {
       <SettingsSection title="Integrations" testID="settings-integrations">
         <SettingRow
           label="Apple Health"
-          switchValue={appleHealth}
-          onSwitchChange={handleAppleHealthToggle}
+          value="Coming soon"
           icon="heart"
           testID="settings-apple-health"
-          switchTestID="settings-apple-health-switch"
         />
         <SettingRow
           label="Google Fit"
-          switchValue={googleFit}
-          onSwitchChange={handleGoogleFitToggle}
+          value="Coming soon"
           icon="fitness"
           testID="settings-google-fit"
-          switchTestID="settings-google-fit-switch"
         />
       </SettingsSection>
 
@@ -194,7 +159,6 @@ export default function SettingsScreen() {
           Appearance
         </Text>
 
-        {/* ── App Color ─────────────────────────────────── */}
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeader}>
             <Text variant="subheadBold" color="onSurface">
@@ -232,7 +196,6 @@ export default function SettingsScreen() {
 
         <View style={styles.divider} />
 
-        {/* ── Theme Mode ────────────────────────────────── */}
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeader}>
             <Text variant="subheadBold" color="onSurface">
@@ -346,7 +309,6 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  // ── Cards ─────────────────────────────────────────────
   card: {
     padding: theme.spacing.md,
     borderRadius: theme.radii.md,
@@ -356,19 +318,12 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing.md,
   },
   pressed: { opacity: theme.opacity.pressed },
-
-  // ── Appearance ────────────────────────────────────────
-  sectionBlock: {
-    gap: theme.spacing.sm,
-  },
-  sectionHeader: {
-    gap: theme.spacing.xxs,
-  },
+  sectionBlock: { gap: theme.spacing.sm },
+  sectionHeader: { gap: theme.spacing.xxs },
   divider: {
     height: 1,
     backgroundColor: theme.colors.panelBorder,
   },
-
   themeRow: {
     flexDirection: "row",
     gap: theme.spacing.sm,
@@ -397,7 +352,6 @@ const styles = StyleSheet.create((theme) => ({
   themeRadioDotSelected: {
     backgroundColor: theme.colors.primary,
   },
-
   accentSwatchRow: {
     flexDirection: "row",
     gap: theme.spacing.md,
@@ -415,8 +369,6 @@ const styles = StyleSheet.create((theme) => ({
   accentSwatchSelected: {
     borderColor: theme.colors.onSurface,
   },
-
-  // ── About ─────────────────────────────────────────────
   aboutRow: {
     flexDirection: "row",
     justifyContent: "space-between",

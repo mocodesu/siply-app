@@ -1,14 +1,15 @@
 // ─────────────────────────────────────────────────────────────
 // components/badge-row.tsx
 //
-// One achievement in the "All Badges" list.
+// Fix from Step 11: badges above the current tier now show a
+// padlock rather than "5/30". Badges within the current tier show
+// their counter; the next tier shows a padlock. This matches the
+// reference design and keeps the ladder legible at a glance.
 //
-// Three visual states, each communicated by more than color alone
-// so the meaning survives greyscale and high-contrast mode:
-//
-//   unlocked     → filled accent badge, green checkmark
-//   in progress  → tinted badge, "5/7" counter
-//   locked       → muted badge, padlock
+// "Within the current tier" is determined by whether *any* badge
+// has been unlocked at that metric level — the caller decides via
+// `showProgress`. If `showProgress` is false and the badge isn't
+// unlocked, it renders as locked regardless of the numeric value.
 // ─────────────────────────────────────────────────────────────
 import Text from "@/components/text";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,21 +20,19 @@ import { StyleSheet } from "react-native-unistyles";
 type IconName = keyof typeof Ionicons.glyphMap;
 
 export interface BadgeRowProps {
-  /** Achievement title. */
   title: string;
-  /** One-line description. */
   description: string;
-  /** Ionicons glyph for this achievement. */
   icon: IconName;
-  /** Best-ever progress toward `target`. */
   progress: number;
-  /** Value at which the badge unlocks. */
   target: number;
-  /** True once the badge has been earned. */
   unlocked: boolean;
-  /** Container style override. */
+  /**
+   * When false, a not-yet-unlocked badge shows a padlock even if
+   * `progress > 0`. Callers set this to false for tiers above the
+   * user's current highest unlocked tier.
+   */
+  showProgress: boolean;
   style?: ViewStyle;
-  /** Test identifier forwarded to the outer View. */
   testID?: string;
 }
 
@@ -44,26 +43,28 @@ export function BadgeRow({
   progress,
   target,
   unlocked,
+  showProgress,
   style,
   testID,
 }: BadgeRowProps) {
-  const inProgress = !unlocked && progress > 0;
+  const showCounter = !unlocked && showProgress && progress > 0;
+  const showLock = !unlocked && !showCounter;
 
   const iconWrapStyle = unlocked
     ? styles.iconWrapUnlocked
-    : inProgress
+    : showCounter
       ? styles.iconWrapInProgress
       : styles.iconWrapLocked;
 
   const iconStyle = unlocked
     ? styles.iconUnlocked
-    : inProgress
+    : showCounter
       ? styles.iconInProgress
       : styles.iconLocked;
 
   const statusLabel = unlocked
     ? "Unlocked"
-    : inProgress
+    : showCounter
       ? `Progress ${progress} of ${target}`
       : "Locked";
 
@@ -93,7 +94,7 @@ export function BadgeRow({
 
       {unlocked ? (
         <Ionicons name="checkmark-circle" size={22} style={styles.checkIcon} />
-      ) : inProgress ? (
+      ) : showCounter ? (
         <Text variant="caption" color="mutedText">
           {progress}/{target}
         </Text>
@@ -122,32 +123,16 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  iconWrapUnlocked: {
-    backgroundColor: theme.colors.primary,
-  },
-  iconWrapInProgress: {
-    backgroundColor: theme.colors.panel,
-  },
-  iconWrapLocked: {
-    backgroundColor: theme.colors.panel,
-  },
-  iconUnlocked: {
-    color: theme.colors.onPrimary,
-  },
-  iconInProgress: {
-    color: theme.colors.primary,
-  },
-  iconLocked: {
-    color: theme.colors.mutedText,
-  },
+  iconWrapUnlocked: { backgroundColor: theme.colors.primary },
+  iconWrapInProgress: { backgroundColor: theme.colors.panel },
+  iconWrapLocked: { backgroundColor: theme.colors.panel },
+  iconUnlocked: { color: theme.colors.onPrimary },
+  iconInProgress: { color: theme.colors.primary },
+  iconLocked: { color: theme.colors.mutedText },
   textBlock: {
     flex: 1,
     gap: theme.spacing.xxs,
   },
-  checkIcon: {
-    color: theme.colors.active,
-  },
-  lockIcon: {
-    color: theme.colors.mutedText,
-  },
+  checkIcon: { color: theme.colors.active },
+  lockIcon: { color: theme.colors.mutedText },
 }));

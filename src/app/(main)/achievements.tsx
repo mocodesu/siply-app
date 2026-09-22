@@ -1,8 +1,9 @@
 // ─────────────────────────────────────────────────────────────
 // app/(main)/achievements.tsx
 //
-// Layout mirrors reference screen 8: header, hero badge card,
-// "All Badges" section label, and the badge list.
+// Computes the "current tier" (highest streak count achieved) and
+// passes `showProgress` to each BadgeRow so anything above that
+// tier renders as locked.
 // ─────────────────────────────────────────────────────────────
 import { AchievementHero } from "@/components/achievement-hero";
 import { BadgeRow } from "@/components/badge-row";
@@ -10,27 +11,34 @@ import { IconButton } from "@/components/icon-button";
 import { ScrollScreen } from "@/components/screen";
 import Text from "@/components/text";
 import { useAchievements } from "@/hooks/use-achievements";
+import type { AchievementView } from "@/repositories/achievements-repo";
 import { router } from "expo-router";
 import React, { useCallback } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
-/**
- * Unit label shown under the hero description. Kept here rather
- * than in the definition because it's presentational copy, not
- * data — a "10 times" phrasing only makes sense for the hero's
- * day-count metric.
- */
 const HERO_UNIT_LABEL = "10 times";
+
+/**
+ * Computes the highest unlocked `target` among streak badges. Any
+ * badge with a streak target above this renders as locked even if
+ * its progress count is non-zero.
+ */
+function highestUnlockedStreakTarget(badges: AchievementView[]): number {
+  return badges.reduce((best, badge) => {
+    if (badge.unlocked && badge.target > best) return badge.target;
+    return best;
+  }, 0);
+}
 
 export default function AchievementsScreen() {
   const { loading, hero, badges } = useAchievements();
 
   const handleBack = useCallback(() => {
-    if (router.canGoBack()) {
-      router.back();
-    }
+    if (router.canGoBack()) router.back();
   }, []);
+
+  const highestStreak = highestUnlockedStreakTarget(badges);
 
   const header = (
     <View style={styles.headerRow}>
@@ -72,18 +80,31 @@ export default function AchievementsScreen() {
           </Text>
 
           <View style={styles.list}>
-            {badges.map((badge) => (
-              <BadgeRow
-                key={badge.id}
-                title={badge.title}
-                description={badge.description}
-                icon={badge.icon}
-                progress={badge.progress}
-                target={badge.target}
-                unlocked={badge.unlocked}
-                testID={`achievements-badge-${badge.id}`}
-              />
-            ))}
+            {badges.map((badge) => {
+              // Streak badges above the highest unlocked tier are
+              // shown as locked. Non-streak badges always show
+              // their counter when there's progress.
+              const isStreakBadge = badge.description
+                .toLowerCase()
+                .includes("daily");
+              const showProgress = isStreakBadge
+                ? badge.target <= highestStreak || badge.unlocked
+                : true;
+
+              return (
+                <BadgeRow
+                  key={badge.id}
+                  title={badge.title}
+                  description={badge.description}
+                  icon={badge.icon}
+                  progress={badge.progress}
+                  target={badge.target}
+                  unlocked={badge.unlocked}
+                  showProgress={showProgress}
+                  testID={`achievements-badge-${badge.id}`}
+                />
+              );
+            })}
           </View>
         </View>
       )}
@@ -97,17 +118,11 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     minHeight: theme.layout.minTouchTarget,
   },
-  headerTitle: {
-    flex: 1,
-  },
+  headerTitle: { flex: 1 },
   headerSpacer: {
     width: theme.layout.minTouchTarget,
     height: theme.layout.minTouchTarget,
   },
-  listSection: {
-    gap: theme.spacing.md,
-  },
-  list: {
-    gap: theme.spacing.sm,
-  },
+  listSection: { gap: theme.spacing.md },
+  list: { gap: theme.spacing.sm },
 }));

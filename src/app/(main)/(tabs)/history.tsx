@@ -1,12 +1,8 @@
 // ─────────────────────────────────────────────────────────────
 // app/(tabs)/history.tsx — History
 //
-// Layout mirrors reference screen 6: header, date navigator, the
-// day's log list, and the daily-total card.
-//
-// No back button — this is a tab, and the tab bar owns navigation.
-// The calendar icon is wired to a placeholder until a date picker
-// is built.
+// The calendar icon now opens the calendar picker modal. The
+// selected date comes back via the UI store, consumed on focus.
 // ─────────────────────────────────────────────────────────────
 import { DailyTotalCard } from "@/components/daily-total-card";
 import { DateNavigator } from "@/components/date-navigator";
@@ -14,15 +10,17 @@ import { HistoryLogRow } from "@/components/history-log-row";
 import { IconButton } from "@/components/icon-button";
 import { ScrollScreen } from "@/components/screen";
 import Text from "@/components/text";
+import { dayKeyFromDate } from "@/constants/notifications";
 import { useDailyLogs } from "@/hooks/use-daily-logs";
 import { DEFAULT_GOAL_ML } from "@/repositories/water-repo";
+import { useUIStore } from "@/store/ui-store";
 import { addDays, isAfterDay, startOfDay } from "@/utils/date";
+import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
 export default function HistoryScreen() {
-  // ── Selected day ────────────────────────────────────────
   const [selectedDate, setSelectedDate] = useState<Date>(() =>
     startOfDay(new Date()),
   );
@@ -34,6 +32,19 @@ export default function HistoryScreen() {
   const totalMl = summary?.totalMl ?? 0;
   const goalMl = summary?.goalMl ?? DEFAULT_GOAL_ML;
 
+  // ── Consume pending date from the calendar picker ───────
+  const pendingHistoryDate = useUIStore((s) => s.pendingHistoryDate);
+  const setPendingHistoryDate = useUIStore((s) => s.setPendingHistoryDate);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (pendingHistoryDate) {
+        setSelectedDate(startOfDay(pendingHistoryDate));
+        setPendingHistoryDate(null);
+      }
+    }, [pendingHistoryDate, setPendingHistoryDate]),
+  );
+
   // ── Navigation ──────────────────────────────────────────
   const handlePrev = useCallback(() => {
     setSelectedDate((prev) => addDays(prev, -1));
@@ -42,20 +53,20 @@ export default function HistoryScreen() {
   const handleNext = useCallback(() => {
     setSelectedDate((prev) => {
       const next = addDays(prev, 1);
-      // Guard against overshooting today if the button were ever
-      // triggered while disabled.
       return isAfterDay(next, today) ? prev : next;
     });
   }, [today]);
 
   const canGoNext = !isAfterDay(addDays(selectedDate, 1), today);
 
-  // ── Calendar placeholder ────────────────────────────────
+  // ── Calendar ────────────────────────────────────────────
   const handleOpenCalendar = useCallback(() => {
-    // Date picker flow lands in a later step.
-  }, []);
+    router.push({
+      pathname: "/calendar",
+      params: { initialDate: dayKeyFromDate(selectedDate) },
+    });
+  }, [selectedDate]);
 
-  // ── Header ──────────────────────────────────────────────
   const header = (
     <View style={styles.headerRow}>
       <View style={styles.headerSpacer} />
@@ -78,7 +89,6 @@ export default function HistoryScreen() {
 
   return (
     <ScrollScreen header={header} testID="history-screen">
-      {/* ── Date navigator ──────────────────────────────── */}
       <DateNavigator
         date={selectedDate}
         onPrev={handlePrev}
@@ -87,7 +97,6 @@ export default function HistoryScreen() {
         testID="history-date-nav"
       />
 
-      {/* ── Log list ────────────────────────────────────── */}
       {logs.length === 0 ? (
         <View style={styles.emptyState} testID="history-empty-state">
           <Text variant="subhead" color="mutedText" textAlign="center">
@@ -107,7 +116,6 @@ export default function HistoryScreen() {
         </View>
       )}
 
-      {/* ── Daily total ─────────────────────────────────── */}
       <DailyTotalCard
         totalMl={totalMl}
         goalMl={goalMl}

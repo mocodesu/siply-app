@@ -1,11 +1,5 @@
 // ─────────────────────────────────────────────────────────────
 // app/(main)/_layout.tsx
-//
-// The (main) group owns its own <Stack>. Every screen that renders
-// after onboarding lives here.
-//
-// All three bootstrap hooks live here so the hydration, reminder,
-// and settings stores are populated before any screen mounts.
 // ─────────────────────────────────────────────────────────────
 
 import { useHydrationBootstrap } from "@/hooks/use-hydration-bootstrap";
@@ -40,24 +34,27 @@ export default function MainGroupLayout() {
 
       <Stack.Screen
         name="add-water"
-        options={{
-          presentation: "modal",
-          animation: "slide_from_bottom",
-        }}
+        options={{ presentation: "modal", animation: "slide_from_bottom" }}
       />
       <Stack.Screen
         name="daily-goal"
-        options={{
-          presentation: "modal",
-          animation: "slide_from_bottom",
-        }}
+        options={{ presentation: "modal", animation: "slide_from_bottom" }}
       />
       <Stack.Screen
         name="reminders"
-        options={{
-          presentation: "modal",
-          animation: "slide_from_bottom",
-        }}
+        options={{ presentation: "modal", animation: "slide_from_bottom" }}
+      />
+      <Stack.Screen
+        name="add-reminder"
+        options={{ presentation: "modal", animation: "slide_from_bottom" }}
+      />
+      <Stack.Screen
+        name="picker"
+        options={{ presentation: "modal", animation: "slide_from_bottom" }}
+      />
+      <Stack.Screen
+        name="calendar"
+        options={{ presentation: "modal", animation: "slide_from_bottom" }}
       />
 
       <Stack.Screen
