@@ -41,8 +41,6 @@ export async function initializeDatabase(db: SQLite.SQLiteDatabase) {
     );
 
     -- ── Reminders ──────────────────────────────────────────
-    -- notification_id stores the identifier returned by
-    -- expo-notifications so a row can be cancelled precisely.
     CREATE TABLE IF NOT EXISTS reminders (
       id              TEXT PRIMARY KEY NOT NULL,
       label           TEXT NOT NULL,
@@ -54,9 +52,22 @@ export async function initializeDatabase(db: SQLite.SQLiteDatabase) {
     );
 
     -- ── App-level reminder preferences ─────────────────────
-    -- Smart Reminders toggle and the seeded flag live here so
-    -- they survive app restarts without a dedicated table.
     CREATE TABLE IF NOT EXISTS reminder_preferences (
+      key        TEXT PRIMARY KEY NOT NULL,
+      value      TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    -- ── App settings (key/value) ───────────────────────────
+    -- Distinct from   so the hydration/reminder
+    -- namespaces stay isolated from user-facing app settings.
+    -- Keys:
+    --   settings.defaultCupSize  → "100" | "250" | "500"
+    --   settings.units           → "ml" | "oz"
+    --   settings.startDay        → "monday" | "sunday"
+    --   settings.appleHealth     → "true" | "false"
+    --   settings.googleFit       → "true" | "false"
+    CREATE TABLE IF NOT EXISTS app_settings (
       key        TEXT PRIMARY KEY NOT NULL,
       value      TEXT NOT NULL,
       updated_at INTEGER NOT NULL

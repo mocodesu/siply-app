@@ -1,8 +1,22 @@
+// ─────────────────────────────────────────────────────────────
+// app/(tabs)/settings.tsx — Settings
+//
+// Layout mirrors reference screen 9: a Preferences group, a
+// Reminders group, and an Integrations group. The existing
+// Appearance and About cards from the starter are preserved at
+// the bottom so the theme picker and legal links stay reachable.
+//
+// Groups are built from SettingsSection + SettingRow, so adding a
+// row is a one-line change and the divider logic stays in one place.
+// ─────────────────────────────────────────────────────────────
 import { ScrollScreen } from "@/components/screen";
+import { SettingRow } from "@/components/setting-row";
+import { SettingsSection } from "@/components/settings-section";
 import Text from "@/components/text";
 import { useThemePreference } from "@/hooks/use-theme-preference";
 import { useHydrationStore } from "@/store/hydration-store";
 import { useRemindersStore } from "@/store/reminders-store";
+import { useSettingsStore } from "@/store/settings-store";
 import {
   APP_COLOR_SCHEMES,
   type AppColorSchemeId,
@@ -12,12 +26,14 @@ import { formatNumber } from "@/utils/format";
 import { Ionicons } from "@expo/vector-icons";
 import * as Application from "expo-application";
 import { router } from "expo-router";
-import { useSQLiteContext } from "expo-sqlite";
-import React from "react";
+import React, { useCallback } from "react";
 import { Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-// ---------- Theme modes (mirrors THEME_MODES in appsettings.tsx) ----------
+// ─────────────────────────────────────────────────────────────
+// Appearance options
+// ─────────────────────────────────────────────────────────────
+
 const THEME_MODES: {
   key: ThemeMode;
   label: string;
@@ -28,28 +44,157 @@ const THEME_MODES: {
   { key: "dark", label: "Dark", icon: "moon" },
 ];
 
+// ─────────────────────────────────────────────────────────────
+// Screen
+// ─────────────────────────────────────────────────────────────
+
 export default function SettingsScreen() {
   const { theme } = useUnistyles();
-  const db = useSQLiteContext();
 
+  // ── Existing theme preferences ──────────────────────────
   const { schemeId, mode, selectScheme, selectMode } = useThemePreference();
 
+  // ── Hydration goal ──────────────────────────────────────
   const goalMl = useHydrationStore((s) => s.goalMl);
+
+  // ── Reminders ───────────────────────────────────────────
   const smartEnabled = useRemindersStore((s) => s.smartEnabled);
+  const setSmartEnabled = useRemindersStore((s) => s.setSmartEnabled);
+
+  // ── App settings ────────────────────────────────────────
+  const defaultCupSize = useSettingsStore((s) => s.defaultCupSize);
+  const units = useSettingsStore((s) => s.units);
+  const startDay = useSettingsStore((s) => s.startDay);
+  const appleHealth = useSettingsStore((s) => s.appleHealth);
+  const googleFit = useSettingsStore((s) => s.googleFit);
+  const setAppleHealth = useSettingsStore((s) => s.setAppleHealth);
+  const setGoogleFit = useSettingsStore((s) => s.setGoogleFit);
 
   // ── Version info ────────────────────────────────────────
   const appVersion = Application.nativeApplicationVersion ?? "—";
   const buildVersion = Application.nativeBuildVersion ?? "—";
 
+  // ── Navigation handlers ─────────────────────────────────
+  const handleOpenDailyGoal = useCallback(() => {
+    router.push("/daily-goal");
+  }, []);
+
+  const handleOpenReminders = useCallback(() => {
+    router.push("/reminders");
+  }, []);
+
+  const handleOpenAchievements = useCallback(() => {
+    router.push("/achievements");
+  }, []);
+
+  const handleSmartToggle = useCallback(
+    (value: boolean) => {
+      void setSmartEnabled(value);
+    },
+    [setSmartEnabled],
+  );
+
+  const handleAppleHealthToggle = useCallback(
+    (value: boolean) => {
+      void setAppleHealth(value);
+    },
+    [setAppleHealth],
+  );
+
+  const handleGoogleFitToggle = useCallback(
+    (value: boolean) => {
+      void setGoogleFit(value);
+    },
+    [setGoogleFit],
+  );
+
+  // ── Unit label for the cup size row ─────────────────────
+  const cupSizeLabel = `${defaultCupSize} ${units}`;
+
   return (
-    <ScrollScreen>
-      {/* ── APPEARANCE ───────────────────────────────────── */}
-      <View style={styles.card}>
+    <ScrollScreen testID="settings-screen">
+      {/* ── Preferences ─────────────────────────────────── */}
+      <SettingsSection title="Preferences" testID="settings-preferences">
+        <SettingRow
+          label="Daily Goal"
+          value={`${formatNumber(goalMl)} ${units}`}
+          onPress={handleOpenDailyGoal}
+          testID="settings-daily-goal"
+        />
+        <SettingRow
+          label="Default Cup Size"
+          value={cupSizeLabel}
+          onPress={() => {
+            // Cup-size picker modal lands in a later step.
+          }}
+          testID="settings-cup-size"
+        />
+        <SettingRow
+          label="Units"
+          value={units}
+          onPress={() => {
+            // Unit picker modal lands in a later step.
+          }}
+          testID="settings-units"
+        />
+        <SettingRow
+          label="Start Day"
+          value={startDay === "monday" ? "Monday" : "Sunday"}
+          onPress={() => {
+            // Start-day picker modal lands in a later step.
+          }}
+          testID="settings-start-day"
+        />
+        <SettingRow
+          label="Achievements"
+          onPress={handleOpenAchievements}
+          testID="settings-achievements"
+        />
+      </SettingsSection>
+
+      {/* ── Reminders ───────────────────────────────────── */}
+      <SettingsSection title="Reminders" testID="settings-reminders">
+        <SettingRow
+          label="Smart Reminders"
+          switchValue={smartEnabled}
+          onSwitchChange={handleSmartToggle}
+          testID="settings-smart-reminders"
+          switchTestID="settings-smart-reminders-switch"
+        />
+        <SettingRow
+          label="Reminder Times"
+          onPress={handleOpenReminders}
+          testID="settings-reminder-times"
+        />
+      </SettingsSection>
+
+      {/* ── Integrations ────────────────────────────────── */}
+      <SettingsSection title="Integrations" testID="settings-integrations">
+        <SettingRow
+          label="Apple Health"
+          switchValue={appleHealth}
+          onSwitchChange={handleAppleHealthToggle}
+          icon="heart"
+          testID="settings-apple-health"
+          switchTestID="settings-apple-health-switch"
+        />
+        <SettingRow
+          label="Google Fit"
+          switchValue={googleFit}
+          onSwitchChange={handleGoogleFitToggle}
+          icon="fitness"
+          testID="settings-google-fit"
+          switchTestID="settings-google-fit-switch"
+        />
+      </SettingsSection>
+
+      {/* ── Appearance ──────────────────────────────────── */}
+      <View style={styles.card} testID="settings-appearance">
         <Text variant="title" color="onSurface">
           Appearance
         </Text>
 
-        {/* ── App Color (scheme picker) ─────────────────── */}
+        {/* ── App Color ─────────────────────────────────── */}
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeader}>
             <Text variant="subheadBold" color="onSurface">
@@ -87,7 +232,7 @@ export default function SettingsScreen() {
 
         <View style={styles.divider} />
 
-        {/* ── Theme Mode (mode picker) ──────────────────── */}
+        {/* ── Theme Mode ────────────────────────────────── */}
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeader}>
             <Text variant="subheadBold" color="onSurface">
@@ -138,48 +283,8 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      <Pressable
-        onPress={() => router.push("/daily-goal")}
-        accessibilityRole="button"
-        accessibilityLabel="Daily Goal"
-        style={({ pressed }) => [styles.aboutLink, pressed && styles.pressed]}
-      >
-        <Text variant="subhead" color="onSurface">
-          Daily Goal
-        </Text>
-        <View style={styles.aboutRow}>
-          <Text variant="subhead" color="mutedText">
-            {formatNumber(goalMl)} ml
-          </Text>
-          <Ionicons
-            name="chevron-forward"
-            size={16}
-            color={theme.colors.mutedText}
-          />
-        </View>
-      </Pressable>
-      <Pressable
-        onPress={() => router.push("/reminders")}
-        accessibilityRole="button"
-        accessibilityLabel="Reminders"
-        style={({ pressed }) => [styles.aboutLink, pressed && styles.pressed]}
-      >
-        <Text variant="subhead" color="onSurface">
-          Reminders
-        </Text>
-        <View style={styles.aboutRow}>
-          <Text variant="subhead" color="mutedText">
-            {smartEnabled ? "On" : "Off"}
-          </Text>
-          <Ionicons
-            name="chevron-forward"
-            size={16}
-            color={theme.colors.mutedText}
-          />
-        </View>
-      </Pressable>
-      {/* ── ABOUT ────────────────────────────────────────── */}
-      <View style={styles.card}>
+      {/* ── About ───────────────────────────────────────── */}
+      <View style={styles.card} testID="settings-about">
         <Text variant="title" color="onSurface">
           About
         </Text>
@@ -202,19 +307,12 @@ export default function SettingsScreen() {
           </Text>
         </View>
 
-        <View style={styles.aboutRow}>
-          <Text variant="subhead" color="mutedText">
-            Made with ❤️ by
-          </Text>
-          <Text variant="subheadBold" color="onSurface">
-            Mocodesu
-          </Text>
-        </View>
-
         <Pressable
           onPress={() => router.push("/legal/privacy")}
           hitSlop={8}
           style={({ pressed }) => [styles.aboutLink, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Privacy policy"
         >
           <Text variant="subhead" color="primary">
             Privacy policy
@@ -230,6 +328,8 @@ export default function SettingsScreen() {
           onPress={() => router.push("/legal/terms")}
           hitSlop={8}
           style={({ pressed }) => [styles.aboutLink, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Terms of service"
         >
           <Text variant="subhead" color="primary">
             Terms of service
@@ -245,19 +345,7 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create((theme, rt) => ({
-  screen: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-    paddingTop: rt.insets.top,
-  },
-  content: {
-    paddingHorizontal: theme.layout.screenPaddingH,
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.giant,
-    gap: theme.spacing.lg,
-  },
-
+const styles = StyleSheet.create((theme) => ({
   // ── Cards ─────────────────────────────────────────────
   card: {
     padding: theme.spacing.md,
@@ -267,32 +355,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     borderColor: theme.colors.panelBorder,
     gap: theme.spacing.md,
   },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: theme.spacing.md,
-  },
-  rowText: {
-    flex: 1,
-    gap: theme.spacing.xxs,
-  },
-  textButton: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xxs,
-  },
-
-  // ── Buttons ───────────────────────────────────────────
-  button: {
-    backgroundColor: theme.colors.primary,
-    paddingVertical: theme.spacing.md,
-    borderRadius: theme.radii.md,
-    alignItems: "center",
-    justifyContent: "center",
-    ...theme.elevation.sm,
-  },
   pressed: { opacity: theme.opacity.pressed },
-  disabled: { opacity: theme.opacity.disabled },
 
   // ── Appearance ────────────────────────────────────────
   sectionBlock: {
@@ -306,7 +369,6 @@ const styles = StyleSheet.create((theme, rt) => ({
     backgroundColor: theme.colors.panelBorder,
   },
 
-  // Theme-mode tiles (mirrors `themeOption` in appsettings.tsx)
   themeRow: {
     flexDirection: "row",
     gap: theme.spacing.sm,
@@ -336,7 +398,6 @@ const styles = StyleSheet.create((theme, rt) => ({
     backgroundColor: theme.colors.primary,
   },
 
-  // Accent swatches (mirrors `accentSwatch*` in appsettings.tsx)
   accentSwatchRow: {
     flexDirection: "row",
     gap: theme.spacing.md,

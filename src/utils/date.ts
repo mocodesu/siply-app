@@ -77,6 +77,18 @@ export function isAfterDay(date: Date, reference: Date): boolean {
   return startOfDay(date).getTime() > startOfDay(reference).getTime();
 }
 
+/**
+ * Parses a `"YYYY-MM-DD"` day key into a local-midnight Date.
+ *
+ * Constructed with the numeric `(year, monthIndex, day)` overload
+ * rather than `new Date(string)`, because the string form is parsed
+ * as UTC and would shift the day in any non-UTC timezone.
+ */
+export function parseDayKey(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
 /** `"May 19, 2024"` — long, unambiguous, matches the reference design. */
 export function formatDateLong(date: Date): string {
   return `${MONTH_NAMES[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;

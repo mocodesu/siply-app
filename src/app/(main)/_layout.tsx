@@ -4,12 +4,13 @@
 // The (main) group owns its own <Stack>. Every screen that renders
 // after onboarding lives here.
 //
-// Both bootstrap hooks live here so the hydration and reminder
-// stores are populated before any screen mounts.
+// All three bootstrap hooks live here so the hydration, reminder,
+// and settings stores are populated before any screen mounts.
 // ─────────────────────────────────────────────────────────────
 
 import { useHydrationBootstrap } from "@/hooks/use-hydration-bootstrap";
 import { useRemindersBootstrap } from "@/hooks/use-reminders-bootstrap";
+import { useSettingsBootstrap } from "@/hooks/use-settings-bootstrap";
 import { Stack } from "expo-router";
 import { Dimensions, Platform } from "react-native";
 
@@ -26,6 +27,7 @@ export const unstable_settings = {
 export default function MainGroupLayout() {
   useHydrationBootstrap();
   useRemindersBootstrap();
+  useSettingsBootstrap();
 
   return (
     <Stack
@@ -35,6 +37,7 @@ export default function MainGroupLayout() {
       }}
     >
       <Stack.Screen name="(tabs)" />
+
       <Stack.Screen
         name="add-water"
         options={{
@@ -55,6 +58,11 @@ export default function MainGroupLayout() {
           presentation: "modal",
           animation: "slide_from_bottom",
         }}
+      />
+
+      <Stack.Screen
+        name="achievements"
+        options={{ animation: "slide_from_right" }}
       />
     </Stack>
   );
