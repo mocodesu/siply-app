@@ -22,8 +22,6 @@ export async function initializeDatabase(db: SQLite.SQLiteDatabase) {
     );
 
     -- ── Water logs ─────────────────────────────────────────
-    -- day_key is a denormalised "YYYY-MM-DD" so daily queries
-    -- can hit an index instead of scanning a timestamp range.
     CREATE TABLE IF NOT EXISTS water_logs (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       amount_ml   INTEGER NOT NULL,
@@ -36,8 +34,6 @@ export async function initializeDatabase(db: SQLite.SQLiteDatabase) {
       ON water_logs(day_key, logged_at DESC);
 
     -- ── Daily goals ────────────────────────────────────────
-    -- One row per day so historic goals stay intact when the
-    -- user changes their target.
     CREATE TABLE IF NOT EXISTS daily_goals (
       day_key    TEXT PRIMARY KEY NOT NULL,
       goal_ml    INTEGER NOT NULL,
@@ -45,13 +41,25 @@ export async function initializeDatabase(db: SQLite.SQLiteDatabase) {
     );
 
     -- ── Reminders ──────────────────────────────────────────
+    -- notification_id stores the identifier returned by
+    -- expo-notifications so a row can be cancelled precisely.
     CREATE TABLE IF NOT EXISTS reminders (
-      id         TEXT PRIMARY KEY NOT NULL,
-      label      TEXT NOT NULL,
-      hour       INTEGER NOT NULL,
-      minute     INTEGER NOT NULL,
-      enabled    INTEGER NOT NULL DEFAULT 1,
-      created_at INTEGER NOT NULL
+      id              TEXT PRIMARY KEY NOT NULL,
+      label           TEXT NOT NULL,
+      hour            INTEGER NOT NULL,
+      minute          INTEGER NOT NULL,
+      enabled         INTEGER NOT NULL DEFAULT 1,
+      notification_id TEXT,
+      created_at      INTEGER NOT NULL
+    );
+
+    -- ── App-level reminder preferences ─────────────────────
+    -- Smart Reminders toggle and the seeded flag live here so
+    -- they survive app restarts without a dedicated table.
+    CREATE TABLE IF NOT EXISTS reminder_preferences (
+      key        TEXT PRIMARY KEY NOT NULL,
+      value      TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
     );
 
     -- ── Achievements ───────────────────────────────────────

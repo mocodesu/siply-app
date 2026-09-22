@@ -1,11 +1,14 @@
 import { ScrollScreen } from "@/components/screen";
 import Text from "@/components/text";
 import { useThemePreference } from "@/hooks/use-theme-preference";
+import { useHydrationStore } from "@/store/hydration-store";
+import { useRemindersStore } from "@/store/reminders-store";
 import {
   APP_COLOR_SCHEMES,
   type AppColorSchemeId,
 } from "@/theme/color-schemes";
 import { ThemeMode } from "@/types";
+import { formatNumber } from "@/utils/format";
 import { Ionicons } from "@expo/vector-icons";
 import * as Application from "expo-application";
 import { router } from "expo-router";
@@ -30,6 +33,9 @@ export default function SettingsScreen() {
   const db = useSQLiteContext();
 
   const { schemeId, mode, selectScheme, selectMode } = useThemePreference();
+
+  const goalMl = useHydrationStore((s) => s.goalMl);
+  const smartEnabled = useRemindersStore((s) => s.smartEnabled);
 
   // ── Version info ────────────────────────────────────────
   const appVersion = Application.nativeApplicationVersion ?? "—";
@@ -132,6 +138,46 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      <Pressable
+        onPress={() => router.push("/daily-goal")}
+        accessibilityRole="button"
+        accessibilityLabel="Daily Goal"
+        style={({ pressed }) => [styles.aboutLink, pressed && styles.pressed]}
+      >
+        <Text variant="subhead" color="onSurface">
+          Daily Goal
+        </Text>
+        <View style={styles.aboutRow}>
+          <Text variant="subhead" color="mutedText">
+            {formatNumber(goalMl)} ml
+          </Text>
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={theme.colors.mutedText}
+          />
+        </View>
+      </Pressable>
+      <Pressable
+        onPress={() => router.push("/reminders")}
+        accessibilityRole="button"
+        accessibilityLabel="Reminders"
+        style={({ pressed }) => [styles.aboutLink, pressed && styles.pressed]}
+      >
+        <Text variant="subhead" color="onSurface">
+          Reminders
+        </Text>
+        <View style={styles.aboutRow}>
+          <Text variant="subhead" color="mutedText">
+            {smartEnabled ? "On" : "Off"}
+          </Text>
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={theme.colors.mutedText}
+          />
+        </View>
+      </Pressable>
       {/* ── ABOUT ────────────────────────────────────────── */}
       <View style={styles.card}>
         <Text variant="title" color="onSurface">
