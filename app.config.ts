@@ -249,12 +249,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           primaryColor: DEFAULT_PRIMARY_COLOR,
         },
       ],
-
-      "./plugins/scroll-bar-android",
-      "expo-router",
-      "expo-font",
-      "expo-sqlite",
-
       [
         "@sentry/react-native/expo",
         {
@@ -263,6 +257,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           url: "https://sentry.io/",
         },
       ],
+      "./plugins/scroll-bar-android",
+      "expo-router",
+      "expo-font",
+      "expo-sqlite",
+      "expo-audio",
     ],
 
     /**

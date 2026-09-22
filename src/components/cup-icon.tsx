@@ -3,11 +3,10 @@
 //
 // Tapered drinking-glass icon with an internal fill line.
 //
-// Drawn with Skia rather than react-native-svg because Skia is
-// already a dependency and a static polygon like this renders
-// essentially for free. The fill is a plain rect clipped to the
-// glass interior — clip is reliable here because the path is a
-// simple closed polygon with no overlapping curves.
+// ── Skia API note ────────────────────────────────────────────
+// The glass outline is built with `Skia.PathBuilder`. The fill is
+// a `Rect` clipped to that path.
+//   See: shopify.github.io/react-native-skia/docs/shapes/path-migration
 // ─────────────────────────────────────────────────────────────
 import {
   Canvas,
@@ -34,7 +33,6 @@ interface ThemedCupProps {
   width: number;
   height: number;
   glassPath: SkPath;
-  /** Y coordinate where the fill starts. Equals `height` when empty. */
   fillY: number;
   outline: string;
   fill: string;
@@ -85,6 +83,7 @@ export function CupIcon({ size = 40, fillRatio = 0, style }: CupIconProps) {
   const width = size;
   const height = size * ASPECT;
 
+  // ── Glass outline (immutable, static) ───────────────────
   const glassPath = useMemo(() => {
     const pad = 1.5;
     const taper = width * 0.15;
@@ -97,20 +96,21 @@ export function CupIcon({ size = 40, fillRatio = 0, style }: CupIconProps) {
     const leftBottom = pad + taper;
     const rightBottom = width - pad - taper;
 
-    const p = Skia.Path.Make();
-    p.moveTo(leftTop + radius, top);
-    p.lineTo(rightTop - radius, top);
-    p.quadTo(rightTop, top, rightTop, top + radius);
-    p.lineTo(rightBottom, bottom - radius);
-    p.quadTo(rightBottom, bottom, rightBottom - radius, bottom);
-    p.lineTo(leftBottom + radius, bottom);
-    p.quadTo(leftBottom, bottom, leftBottom, bottom - radius);
-    p.lineTo(leftTop, top + radius);
-    p.quadTo(leftTop, top, leftTop + radius, top);
-    p.close();
-    return p;
+    return Skia.PathBuilder.Make()
+      .moveTo(leftTop + radius, top)
+      .lineTo(rightTop - radius, top)
+      .quadTo(rightTop, top, rightTop, top + radius)
+      .lineTo(rightBottom, bottom - radius)
+      .quadTo(rightBottom, bottom, rightBottom - radius, bottom)
+      .lineTo(leftBottom + radius, bottom)
+      .quadTo(leftBottom, bottom, leftBottom, bottom - radius)
+      .lineTo(leftTop, top + radius)
+      .quadTo(leftTop, top, leftTop + radius, top)
+      .close()
+      .build();
   }, [width, height]);
 
+  // ── Fill position ───────────────────────────────────────
   const fillY = useMemo(() => {
     const pad = 1.5;
     const radius = width * 0.14;

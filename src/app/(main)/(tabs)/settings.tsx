@@ -1,14 +1,20 @@
 // ─────────────────────────────────────────────────────────────
 // app/(tabs)/settings.tsx — Settings
 //
-// Fixes from Step 12:
-//   • Daily Goal row now shows the correct unit
-//   • Default Cup Size, Units, Start Day rows now open pickers
-//   • Integrations toggles marked "Coming soon" and disabled
+// Every group — Preferences, Reminders, Integrations, Appearance,
+// About — now uses the same `SettingsSection` + `SettingRow`
+// pattern so the whole screen reads as a single list.
+//
+// Custom content inside the Appearance group (color swatches,
+// theme mode tiles) is wrapped in `SettingsContentRow`, which
+// applies the same padding as a row so everything lines up.
 // ─────────────────────────────────────────────────────────────
 import { ScrollScreen } from "@/components/screen";
 import { SettingRow } from "@/components/setting-row";
-import { SettingsSection } from "@/components/settings-section";
+import {
+  SettingsContentRow,
+  SettingsSection,
+} from "@/components/settings-section";
 import Text from "@/components/text";
 import { useThemePreference } from "@/hooks/use-theme-preference";
 import { useHydrationStore } from "@/store/hydration-store";
@@ -28,6 +34,10 @@ import React, { useCallback } from "react";
 import { Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+// ─────────────────────────────────────────────────────────────
+// Theme mode options
+// ─────────────────────────────────────────────────────────────
+
 const THEME_MODES: {
   key: ThemeMode;
   label: string;
@@ -37,6 +47,10 @@ const THEME_MODES: {
   { key: "light", label: "Light", icon: "sunny-outline" },
   { key: "dark", label: "Dark", icon: "moon" },
 ];
+
+// ─────────────────────────────────────────────────────────────
+// Screen
+// ─────────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
   const { theme } = useUnistyles();
@@ -77,6 +91,14 @@ export default function SettingsScreen() {
 
   const handleOpenStartDayPicker = useCallback(() => {
     router.push({ pathname: "/picker", params: { setting: "start-day" } });
+  }, []);
+
+  const handleOpenPrivacy = useCallback(() => {
+    router.push("/legal/privacy");
+  }, []);
+
+  const handleOpenTerms = useCallback(() => {
+    router.push("/legal/terms");
   }, []);
 
   const handleSmartToggle = useCallback(
@@ -154,13 +176,10 @@ export default function SettingsScreen() {
       </SettingsSection>
 
       {/* ── Appearance ──────────────────────────────────── */}
-      <View style={styles.card} testID="settings-appearance">
-        <Text variant="title" color="onSurface">
-          Appearance
-        </Text>
-
-        <View style={styles.sectionBlock}>
-          <View style={styles.sectionHeader}>
+      <SettingsSection title="Appearance" testID="settings-appearance">
+        {/* App Color — swatch row inside a content row */}
+        <SettingsContentRow testID="settings-app-color">
+          <View style={styles.labelBlock}>
             <Text variant="subheadBold" color="onSurface">
               App Color
             </Text>
@@ -180,6 +199,7 @@ export default function SettingsScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={scheme.label}
                   accessibilityState={{ selected }}
+                  hitSlop={6}
                 >
                   <View
                     style={[
@@ -192,12 +212,11 @@ export default function SettingsScreen() {
               );
             })}
           </View>
-        </View>
+        </SettingsContentRow>
 
-        <View style={styles.divider} />
-
-        <View style={styles.sectionBlock}>
-          <View style={styles.sectionHeader}>
+        {/* Theme Mode — tile row inside a content row */}
+        <SettingsContentRow testID="settings-theme-mode">
+          <View style={styles.labelBlock}>
             <Text variant="subheadBold" color="onSurface">
               Theme Mode
             </Text>
@@ -243,90 +262,55 @@ export default function SettingsScreen() {
               );
             })}
           </View>
-        </View>
-      </View>
+        </SettingsContentRow>
+      </SettingsSection>
 
       {/* ── About ───────────────────────────────────────── */}
-      <View style={styles.card} testID="settings-about">
-        <Text variant="title" color="onSurface">
-          About
-        </Text>
-
-        <View style={styles.aboutRow}>
-          <Text variant="subhead" color="mutedText">
-            Version
-          </Text>
-          <Text variant="subheadBold" color="onSurface">
-            {appVersion}
-          </Text>
-        </View>
-
-        <View style={styles.aboutRow}>
-          <Text variant="subhead" color="mutedText">
-            Build
-          </Text>
-          <Text variant="subheadBold" color="onSurface">
-            {buildVersion}
-          </Text>
-        </View>
-
-        <Pressable
-          onPress={() => router.push("/legal/privacy")}
-          hitSlop={8}
-          style={({ pressed }) => [styles.aboutLink, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Privacy policy"
-        >
-          <Text variant="subhead" color="primary">
-            Privacy policy
-          </Text>
-          <Ionicons
-            name="chevron-forward"
-            size={16}
-            color={theme.colors.primary}
-          />
-        </Pressable>
-
-        <Pressable
-          onPress={() => router.push("/legal/terms")}
-          hitSlop={8}
-          style={({ pressed }) => [styles.aboutLink, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Terms of service"
-        >
-          <Text variant="subhead" color="primary">
-            Terms of service
-          </Text>
-          <Ionicons
-            name="chevron-forward"
-            size={16}
-            color={theme.colors.primary}
-          />
-        </Pressable>
-      </View>
+      <SettingsSection title="About" testID="settings-about">
+        <SettingRow label="Version" value={appVersion} />
+        <SettingRow label="Build" value={buildVersion} />
+        <SettingRow
+          label="Privacy policy"
+          onPress={handleOpenPrivacy}
+          testID="settings-privacy"
+        />
+        <SettingRow
+          label="Terms of service"
+          onPress={handleOpenTerms}
+          testID="settings-terms"
+        />
+      </SettingsSection>
     </ScrollScreen>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
-  card: {
-    padding: theme.spacing.md,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.borderWidth.thin,
-    borderColor: theme.colors.panelBorder,
-    gap: theme.spacing.md,
+  // ── Appearance sub-blocks ─────────────────────────────
+  labelBlock: {
+    gap: theme.spacing.xxs,
   },
-  pressed: { opacity: theme.opacity.pressed },
-  sectionBlock: { gap: theme.spacing.sm },
-  sectionHeader: { gap: theme.spacing.xxs },
-  divider: {
-    height: 1,
-    backgroundColor: theme.colors.panelBorder,
+  accentSwatchRow: {
+    flexDirection: "row",
+    gap: theme.spacing.md,
+    paddingTop: theme.spacing.xxs,
+  },
+  accentSwatchWrapper: {
+    alignItems: "center",
+  },
+  accentSwatch: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  accentSwatchSelected: {
+    borderColor: theme.colors.onSurface,
   },
   themeRow: {
     flexDirection: "row",
     gap: theme.spacing.sm,
+    paddingTop: theme.spacing.xxs,
   },
   themeOption: {
     flex: 1,
@@ -351,33 +335,5 @@ const styles = StyleSheet.create((theme) => ({
   },
   themeRadioDotSelected: {
     backgroundColor: theme.colors.primary,
-  },
-  accentSwatchRow: {
-    flexDirection: "row",
-    gap: theme.spacing.md,
-  },
-  accentSwatchWrapper: {
-    alignItems: "center",
-  },
-  accentSwatch: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  accentSwatchSelected: {
-    borderColor: theme.colors.onSurface,
-  },
-  aboutRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  aboutLink: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: theme.spacing.xs,
   },
 }));

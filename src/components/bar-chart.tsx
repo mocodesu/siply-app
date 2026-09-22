@@ -4,22 +4,16 @@
 // Skia bar chart with top-rounded bars, horizontal grid lines, and
 // text labels rendered as React Native overlays.
 //
-// Why RN Text for labels: Skia's `Text` needs a loaded typeface
-// handle, which would duplicate the font wiring we already have.
-// The labels are static and few, so overlaying RN text is both
-// simpler and more accessible.
-//
-// All bars live in a single Skia path (one subpath per bar), so
-// the canvas draws in one pass regardless of bucket count. A
-// separate highlight path is used when a bar should stand out.
+// ── Skia API note ────────────────────────────────────────────
+// Uses the immutable Path API. Every bar subpath is appended to a
+// single `SkPathBuilder`, then `.build()` produces the final path.
+//   See: shopify.github.io/react-native-skia/docs/shapes/path-migration
 //
 // ── React Compiler note ──────────────────────────────────────
 // `appendBar` lives at module scope with a `'worklet'` directive.
-// It was originally a component-scoped helper, but React Compiler's
-// `enableFunctionOutlining` optimization hoisted it out of the
-// worklet closure, turning it into a "remote function" that the UI
-// thread cannot call synchronously. Keeping it at module scope
-// avoids that transformation entirely.
+// React Compiler's `enableFunctionOutlining` optimization hoists
+// component-scoped helpers out of the worklet closure, turning them
+// into "remote functions" the UI thread cannot call synchronously.
 //   See: github.com/software-mansion/react-native-reanimated/issues/6826
 // ─────────────────────────────────────────────────────────────
 import Text from "@/components/text";
@@ -45,28 +39,21 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 // Layout constants
 // ─────────────────────────────────────────────────────────────
 
-/** Height of the bar + grid area, in pixels. */
 const CHART_HEIGHT = 170;
-/** Height of the x-axis label strip below the chart. */
 const AXIS_HEIGHT = 24;
-/** Width of the y-axis label column, in pixels. */
 const Y_AXIS_WIDTH = 38;
-/** Corner radius on the top of each bar. */
 const BAR_RADIUS = 4;
-/** Bar width as a fraction of its slot. */
 const BAR_WIDTH_RATIO = 0.55;
-/** Bars grow from 0 to full over this many milliseconds. */
 const GROW_DURATION = 600;
 
 // ─────────────────────────────────────────────────────────────
 // Worklet helper — module scope, marked `'worklet'`
-//
-// Appends a top-rounded rectangle subpath to `path`. Must stay at
-// module scope; see the React Compiler note at the top of the file.
 // ─────────────────────────────────────────────────────────────
 
+type BarPathBuilder = ReturnType<typeof Skia.PathBuilder.Make>;
+
 const appendBar = (
-  path: SkPath,
+  builder: BarPathBuilder,
   x: number,
   y: number,
   w: number,
@@ -75,13 +62,13 @@ const appendBar = (
   "worklet";
   if (h <= 0) return;
   const r = Math.min(BAR_RADIUS, w / 2, h);
-  path.moveTo(x, y + h);
-  path.lineTo(x, y + r);
-  path.quadTo(x, y, x + r, y);
-  path.lineTo(x + w - r, y);
-  path.quadTo(x + w, y, x + w, y + r);
-  path.lineTo(x + w, y + h);
-  path.close();
+  builder.moveTo(x, y + h);
+  builder.lineTo(x, y + r);
+  builder.quadTo(x, y, x + r, y);
+  builder.lineTo(x + w - r, y);
+  builder.quadTo(x + w, y, x + w, y + r);
+  builder.lineTo(x + w, y + h);
+  builder.close();
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -142,7 +129,6 @@ const ThemedChartCanvas = withUnistyles(
     gridColor,
   }: ThemedChartCanvasProps) => (
     <Canvas style={{ width, height }}>
-      {/* Horizontal grid lines */}
       {tickYs.map((y, index) => (
         <Line
           key={`grid-${index}`}
@@ -153,9 +139,7 @@ const ThemedChartCanvas = withUnistyles(
           style="stroke"
         />
       ))}
-      {/* Regular bars */}
       <Path path={barsPath} color={barColor} />
-      {/* Highlighted bar, drawn on top */}
       {highlightPath && <Path path={highlightPath} color={highlightColor} />}
     </Canvas>
   ),
@@ -171,22 +155,15 @@ const ThemedChartCanvas = withUnistyles(
 // ─────────────────────────────────────────────────────────────
 
 export interface BarChartDatum {
-  /** Label shown under the bar. */
   label: string;
-  /** Numeric value the bar's height represents. */
   value: number;
 }
 
 export interface BarChartProps {
-  /** Data points, left to right. */
   data: readonly BarChartDatum[];
-  /** Total width of the chart, including the y-axis column. */
   width: number;
-  /** Index of the bar to draw in the highlight color. `-1` for none. */
   highlightIndex?: number;
-  /** Container style override. */
   style?: ViewStyle;
-  /** Test identifier forwarded to the outer View. */
   testID?: string;
 }
 
@@ -204,7 +181,6 @@ export function BarChart({
     [data],
   );
 
-  // ── Grid line positions (top of canvas = max, bottom = 0) ──
   const tickYs = useMemo(
     () => ticks.map((tick) => CHART_HEIGHT - (tick / niceMax) * CHART_HEIGHT),
     [ticks, niceMax],
@@ -221,8 +197,7 @@ export function BarChart({
     });
   }, [data, progress]);
 
-  // ── Geometry memoised so the derived value only rebuilds on
-  //    real data or size changes, not every frame. ───────────
+  // ── Geometry ──────────────────────────────────────────────
   const geometry = useMemo(() => {
     if (data.length === 0 || chartWidth <= 0) return [];
 
@@ -238,23 +213,23 @@ export function BarChart({
   }, [data, chartWidth, niceMax]);
 
   const barsPath = useDerivedValue(() => {
-    const path = Skia.Path.Make();
+    const builder = Skia.PathBuilder.Make();
     for (let i = 0; i < geometry.length; i += 1) {
       if (i === highlightIndex) continue;
       const bar = geometry[i];
       const h = bar.targetHeight * progress.value;
-      appendBar(path, bar.x, CHART_HEIGHT - h, bar.width, h);
+      appendBar(builder, bar.x, CHART_HEIGHT - h, bar.width, h);
     }
-    return path;
+    return builder.build();
   }, [geometry, highlightIndex]);
 
   const highlightPath = useDerivedValue(() => {
     if (highlightIndex < 0 || highlightIndex >= geometry.length) return null;
     const bar = geometry[highlightIndex];
     const h = bar.targetHeight * progress.value;
-    const path = Skia.Path.Make();
-    appendBar(path, bar.x, CHART_HEIGHT - h, bar.width, h);
-    return path;
+    const builder = Skia.PathBuilder.Make();
+    appendBar(builder, bar.x, CHART_HEIGHT - h, bar.width, h);
+    return builder.build();
   }, [geometry, highlightIndex]);
 
   if (chartWidth <= 0) {
@@ -264,7 +239,6 @@ export function BarChart({
   return (
     <View testID={testID} style={[styles.root, style]}>
       <View style={styles.chartRow}>
-        {/* ── Y-axis labels ───────────────────────────── */}
         <View style={styles.yAxis}>
           {ticks.map((tick, index) => (
             <Text
@@ -278,7 +252,6 @@ export function BarChart({
           ))}
         </View>
 
-        {/* ── Canvas ──────────────────────────────────── */}
         <ThemedChartCanvas
           width={chartWidth}
           height={CHART_HEIGHT}
@@ -288,7 +261,6 @@ export function BarChart({
         />
       </View>
 
-      {/* ── X-axis labels ─────────────────────────────── */}
       <View style={[styles.xAxis, { marginLeft: Y_AXIS_WIDTH }]}>
         {data.map((datum, index) => (
           <View key={`x-${index}`} style={styles.xSlot}>
@@ -308,9 +280,7 @@ export function BarChart({
 }
 
 const styles = StyleSheet.create({
-  root: {
-    width: "100%",
-  },
+  root: { width: "100%" },
   chartRow: {
     flexDirection: "row",
     height: CHART_HEIGHT,

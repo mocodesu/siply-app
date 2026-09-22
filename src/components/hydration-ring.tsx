@@ -3,15 +3,12 @@
 //
 // Circular progress ring for daily hydration progress.
 //
-// Draws a full-circle track behind an animated arc. The arc sweep
-// is driven by Reanimated on the UI thread and consumed directly by
-// Skia — no `useAnimatedProps` or `createAnimatedComponent`.
-//
-// Colors are mapped from `theme.semantic` via `withUnistyles`, so
-// the ring only re-renders when the theme changes, never when the
-// parent screen re-renders for other reasons.
+// ── Skia API note ────────────────────────────────────────────
+// Uses the immutable Path API throughout. The track is a static
+// factory (`Skia.Path.Circle`); the animated arc is built with
+// `Skia.PathBuilder`.
+//   See: shopify.github.io/react-native-skia/docs/shapes/path-migration
 // ─────────────────────────────────────────────────────────────
-
 import { Canvas, Path, Skia, type SkPath } from "@shopify/react-native-skia";
 import React, { useEffect, useMemo } from "react";
 import { View, type ViewStyle } from "react-native";
@@ -24,18 +21,20 @@ import {
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 
 // ─────────────────────────────────────────────────────────────
-// CONSTANTS
+// Constants
 // ─────────────────────────────────────────────────────────────
 
-const START_ANGLE = -90; // 12 o'clock position
+const START_ANGLE = -90; // 12 o'clock
 const FULL_CIRCLE = 360;
 const ANIMATION_DURATION = 900;
 
+const RING_DEFAULTS = {
+  size: 200,
+  strokeWidth: 14,
+} as const;
+
 // ─────────────────────────────────────────────────────────────
-// THEMED CANVAS
-//
-// `withUnistyles` maps theme tokens to Skia color props. Only this
-// leaf re-renders on theme change.
+// Themed canvas
 // ─────────────────────────────────────────────────────────────
 
 interface ThemedRingCanvasProps {
@@ -57,7 +56,6 @@ const ThemedRingCanvas = withUnistyles(
     strokeWidth,
   }: ThemedRingCanvasProps) => (
     <Canvas style={{ width: size, height: size }}>
-      {/* Track — full circle behind the arc */}
       <Path
         path={trackPath}
         color={trackColor}
@@ -65,7 +63,6 @@ const ThemedRingCanvas = withUnistyles(
         strokeWidth={strokeWidth}
         strokeCap="round"
       />
-      {/* Progress arc — animated sweep */}
       <Path
         path={arcPath}
         color={progressColor}
@@ -82,7 +79,7 @@ const ThemedRingCanvas = withUnistyles(
 );
 
 // ─────────────────────────────────────────────────────────────
-// COMPONENT
+// Component
 // ─────────────────────────────────────────────────────────────
 
 export interface HydrationRingProps {
@@ -90,9 +87,9 @@ export interface HydrationRingProps {
   current: number;
   /** Daily goal in millilitres. */
   goal: number;
-  /** Outer diameter of the ring in pixels. Defaults to the component token. */
+  /** Outer diameter of the ring in pixels. */
   size?: number;
-  /** Stroke thickness in pixels. Defaults to the component token. */
+  /** Stroke thickness in pixels. */
   strokeWidth?: number;
   /** Optional content rendered in the centre of the ring. */
   children?: React.ReactNode;
@@ -100,7 +97,7 @@ export interface HydrationRingProps {
   style?: ViewStyle;
   /** Test identifier forwarded to the outer View. */
   testID?: string;
-  /** Accessibility label override. Defaults to a generated description. */
+  /** Accessibility label override. */
   accessibilityLabel?: string;
 }
 
@@ -114,38 +111,23 @@ export function HydrationRing({
   testID,
   accessibilityLabel,
 }: HydrationRingProps) {
-  // ── Resolve layout from theme tokens ────────────────────
   const resolvedSize = size ?? RING_DEFAULTS.size;
   const resolvedStroke = strokeWidth ?? RING_DEFAULTS.strokeWidth;
 
   // ── Progress maths ──────────────────────────────────────
   const safeGoal = goal > 0 ? goal : 1;
-  const rawProgress = current / safeGoal;
-  const clampedProgress = Math.max(0, Math.min(1, rawProgress));
+  const clampedProgress = Math.max(0, Math.min(1, current / safeGoal));
   const percentage = Math.round(clampedProgress * 100);
 
   // ── Geometry ────────────────────────────────────────────
   const center = resolvedSize / 2;
   const radius = center - resolvedStroke / 2;
 
-  const { trackPath, arcPath } = useMemo(() => {
-    const track = Skia.Path.Make();
-    track.addCircle(center, center, radius);
-
-    const arc = Skia.Path.Make();
-    arc.addArc(
-      {
-        x: center - radius,
-        y: center - radius,
-        width: radius * 2,
-        height: radius * 2,
-      },
-      START_ANGLE,
-      0,
-    );
-
-    return { trackPath: track, arcPath: arc };
-  }, [center, radius]);
+  // Static track — a closed circle, built once via the factory.
+  const trackPath = useMemo(
+    () => Skia.Path.Circle(center, center, radius),
+    [center, radius],
+  );
 
   // ── Animation ───────────────────────────────────────────
   const progressShared = useSharedValue(0);
@@ -158,21 +140,14 @@ export function HydrationRing({
   }, [clampedProgress, progressShared]);
 
   const animatedArcPath = useDerivedValue(() => {
-    const path = Skia.Path.Make();
     const sweep = progressShared.value * FULL_CIRCLE;
-
-    path.addArc(
-      {
-        x: center - radius,
-        y: center - radius,
-        width: radius * 2,
-        height: radius * 2,
-      },
-      START_ANGLE,
-      sweep,
+    const rect = Skia.XYWHRect(
+      center - radius,
+      center - radius,
+      radius * 2,
+      radius * 2,
     );
-
-    return path;
+    return Skia.PathBuilder.Make().addArc(rect, START_ANGLE, sweep).build();
   }, [center, radius]);
 
   // ── Accessibility ───────────────────────────────────────
@@ -206,10 +181,6 @@ export function HydrationRing({
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// STYLES
-// ─────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
@@ -221,17 +192,3 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 });
-
-// ─────────────────────────────────────────────────────────────
-// DEFAULTS
-//
-// Pulled from the `progressRing` component token at call sites via
-// the `size` / `strokeWidth` props. The fallbacks here match the
-// token defaults so the ring renders correctly even when used
-// standalone.
-// ─────────────────────────────────────────────────────────────
-
-const RING_DEFAULTS = {
-  size: 200,
-  strokeWidth: 14,
-} as const;

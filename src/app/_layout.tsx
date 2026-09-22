@@ -5,6 +5,7 @@ import ThemedSystemBars from "@/components/themed-system-bars";
 import { initializeDatabase } from "@/db/client";
 import { useRetentionReminders } from "@/hooks/use-retention-reminders";
 import { APP_FONT_MAP } from "@/theme/fonts";
+import { preloadSounds } from "@/utils/sounds";
 
 import { ThemePreferenceProvider } from "@/components/theme-preferences-provider";
 import { APP_NAME } from "@/constants";
@@ -22,11 +23,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native-unistyles";
 import { sentryConfig } from "../../sentry.config";
 
-// Keep the splash screen up until fonts are ready. Must run at module
-// scope, before the first render, otherwise the OS auto-hides it.
 SplashScreen.preventAutoHideAsync().catch(() => {
-  // A rejection here just means the splash was already hidden —
-  // safe to ignore.
+  // Already hidden — safe to ignore.
 });
 
 const navigationIntegration = Sentry.reactNavigationIntegration({
@@ -54,9 +52,17 @@ const RootLayout = () => {
 
   const [fontsLoaded, fontError] = useFonts(APP_FONT_MAP);
 
+  // Warm the audio players once so the first tap of a session
+  // doesn't pay the construction cost.
+  useEffect(() => {
+    preloadSounds();
+  }, []);
+
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch(() => {
+        // Already hidden — non-fatal.
+      });
     }
   }, [fontsLoaded, fontError]);
 
@@ -70,9 +76,6 @@ const RootLayout = () => {
     }
   }, [navigationRef]);
 
-  // Nothing paints until the fonts resolve (or fail). The splash
-  // screen covers this window, so the user never sees a flash of
-  // system-font text.
   if (!fontsLoaded && !fontError) {
     return null;
   }

@@ -2,11 +2,9 @@
 // components/settings-section.tsx
 //
 // Grouped card with a section title above it and separator lines
-// between rows. Mirrors the iOS Settings grouping pattern while
-// staying inside the app's own visual language.
-//
-// Children are rendered as-is; the section only owns the container
-// and the dividers. Rows are responsible for their own layout.
+// between rows. Also exports `SettingsContentRow` for custom
+// content that needs to sit inside the group at the same padding
+// as a `SettingRow`.
 // ─────────────────────────────────────────────────────────────
 import Text from "@/components/text";
 import React, { Children, Fragment } from "react";
@@ -14,13 +12,9 @@ import { View, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
 export interface SettingsSectionProps {
-  /** Section heading shown above the card, e.g. "Preferences". */
   title: string;
-  /** Rows to render inside the card. */
   children: React.ReactNode;
-  /** Container style override. */
   style?: ViewStyle;
-  /** Test identifier forwarded to the outer View. */
   testID?: string;
 }
 
@@ -50,6 +44,29 @@ export function SettingsSection({
   );
 }
 
+export interface SettingsContentRowProps {
+  children: React.ReactNode;
+  style?: ViewStyle;
+  testID?: string;
+}
+
+/**
+ * Wrapper for custom content inside a `SettingsSection`. Applies
+ * the same horizontal and vertical padding as a `SettingRow` so the
+ * content aligns with the rest of the group.
+ */
+export function SettingsContentRow({
+  children,
+  style,
+  testID,
+}: SettingsContentRowProps) {
+  return (
+    <View testID={testID} style={[styles.contentRow, style]}>
+      {children}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create((theme) => ({
   section: {
     gap: theme.spacing.sm,
@@ -68,5 +85,10 @@ const styles = StyleSheet.create((theme) => ({
     height: theme.borderWidth.hairline,
     marginLeft: theme.spacing.md,
     backgroundColor: theme.colors.panelBorder,
+  },
+  contentRow: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
 }));
