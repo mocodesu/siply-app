@@ -78,6 +78,32 @@ export const WaterRepo = {
     }));
   },
 
+  /**
+   * Returns a map of `day_key` → total ml for every day in the
+   * inclusive range that has at least one log. Days with no logs
+   * are simply absent from the map — callers fill in zeros.
+   */
+  async getDailyTotalsInRange(
+    db: SQLiteDatabase,
+    startDayKey: string,
+    endDayKey: string,
+  ): Promise<Record<string, number>> {
+    const rows = await db.getAllAsync<{ day_key: string; total: number }>(
+      `SELECT day_key, SUM(amount_ml) AS total
+       FROM water_logs
+       WHERE day_key BETWEEN ? AND ?
+       GROUP BY day_key`,
+      startDayKey,
+      endDayKey,
+    );
+
+    const map: Record<string, number> = {};
+    for (const row of rows) {
+      map[row.day_key] = row.total;
+    }
+    return map;
+  },
+
   async addWater(
     db: SQLiteDatabase,
     amountMl: number,
